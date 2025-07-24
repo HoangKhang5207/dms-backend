@@ -77,13 +77,13 @@ Hệ thống cung cấp một loạt các tính năng được phân chia theo v
 
 3.  **Cấu hình Email Server:**
 
-      * Để các tính năng như xác thực email, mời thành viên, đặt lại mật khẩu hoạt động, bạn cần cấu hình SMTP server. Dự án đã được cấu hình sẵn để sử dụng Gmail.
+      * Để các tính năng như xác thực email, mời thành viên, đặt lại mật khẩu hoạt động, cần cấu hình SMTP server. Dự án đã được cấu hình sẵn để sử dụng Gmail.
       * Mở file `src/main/resources/application.properties` và thay đổi thông tin:
         ```properties
         spring.mail.username=your_email@gmail.com
         spring.mail.password=your_gmail_app_password
         ```
-      * **Lưu ý:** Bạn cần tạo "Mật khẩu ứng dụng" (App Password) cho tài khoản Gmail của mình thay vì sử dụng mật khẩu đăng nhập thông thường.
+      * **Lưu ý:** Cần tạo "Mật khẩu ứng dụng" (App Password) cho tài khoản Gmail thay vì sử dụng mật khẩu đăng nhập thông thường.
 
 4.  **Build và Chạy ứng dụng:**
 
@@ -99,7 +99,7 @@ Hệ thống cung cấp một loạt các tính năng được phân chia theo v
 
 5.  **Truy cập API Documentation:**
 
-      * Sau khi khởi động thành công, bạn có thể truy cập giao diện Swagger UI để xem tài liệu API chi tiết và tương tác với các endpoint:
+      * Sau khi khởi động thành công, truy cập giao diện Swagger UI để xem tài liệu API chi tiết và tương tác với các endpoint:
         `http://localhost:8080/swagger-ui.html`
 
 ## Ví dụ về các Endpoint API
