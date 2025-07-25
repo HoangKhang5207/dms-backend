@@ -45,8 +45,10 @@ public class EmailService {
     }
 
     public void sendVerifyEmailCreateAccount(String to, VerifyEmailInfo data) {
+        String verifyLink = String.format("%s?email=%s", data.verifyLink(), to);
+
         sendTemplateEmail(to, applicationProperties.email().templateVerifyEmail(),
-                context -> context.setVariable("verifyLink", data.verifyLink()),
+                context -> context.setVariable("verifyLink", verifyLink),
                 "GENADATA Verify Email");
     }
 

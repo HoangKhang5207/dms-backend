@@ -45,7 +45,7 @@ public class JwtUtils {
                 .expiresAt(now.plus(applicationProperties.jwt().accessTokenDuration())) // Tương ứng "exp"
                 .subject(user.getEmail()) // Dùng subject để lưu email hoặc username
                 .claim("user_id", user.getId()) // Custom claim
-                .claim("name", user.getFirstName() + " " + user.getLastName())
+                .claim("name", user.getLastName() + " " + user.getFirstName())
                 .claim("email", user.getEmail())
                 .claim("is_admin", user.getIsAdmin())
                 .claim("aud", "user_credentials")
