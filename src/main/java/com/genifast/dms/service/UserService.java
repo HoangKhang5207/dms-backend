@@ -5,10 +5,14 @@ import com.genifast.dms.dto.request.RefreshTokenRequestDto;
 import com.genifast.dms.dto.request.ResetPasswordDto;
 import com.genifast.dms.dto.request.ResetPasswordRequestDto;
 import com.genifast.dms.dto.response.LoginResponseDto;
+import com.genifast.dms.dto.response.UserResponse;
 import com.genifast.dms.dto.request.SignUpRequestDto;
 import com.genifast.dms.dto.request.SocialLoginRequestDto;
 
 public interface UserService {
+
+    UserResponse getMyInfo();
+
     /**
      * Xử lý nghiệp vụ đăng ký người dùng mới.
      * 

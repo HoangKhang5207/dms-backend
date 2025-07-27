@@ -155,6 +155,13 @@ public class OrganizationServiceImpl implements OrganizationService {
                 organization.setStatus(1);
                 // Tìm người tạo ra tổ chức
                 User creator = findUserByEmail(organization.getCreatedBy());
+
+                // Kiểm tra người tạo có đang nằm trong tổ chức khác không
+                if (creator.getOrganization() != null) {
+                    throw new ApiException(ErrorCode.USER_IN_ANOTHER_ORGANIZATION,
+                            ErrorMessage.USER_IN_ANOTHER_ORGANIZATION.getMessage());
+                }
+
                 // Gán người tạo vào tổ chức và cho làm Manager đầu tiên
                 creator.setOrganization(organization);
                 creator.setIsOrganizationManager(true);
@@ -220,7 +227,7 @@ public class OrganizationServiceImpl implements OrganizationService {
 
         // 5. Gửi email mời
         for (InviteUsersRequest.UserInvite invite : validInvites) {
-            String joinLink = String.format("%s?orgID=%d&deptID=%d&email=%s",
+            String joinLink = String.format("%s?orgId=%d&deptId=%d&email=%s",
                     applicationProperties.email().linkJoinOrganization(), orgId, invite.getDepartmentId(),
                     invite.getEmail());
 
@@ -392,7 +399,8 @@ public class OrganizationServiceImpl implements OrganizationService {
         // Authorize: User phải là thành viên của tổ chức chứa phòng ban này
         checkUserAccessToOrganization(currentUser, department.getOrganization().getId());
 
-        authorizeUserIsOrgManager(currentUser, department.getOrganization().getId());
+        // Cho phép cả Org Manager và Dept Manager xem thành viên
+        authorizeUserIsOrgManagerOrDeptManager(currentUser);
 
         Page<User> userPage = userRepository.findByDepartmentId(deptId, pageable);
 
@@ -473,6 +481,15 @@ public class OrganizationServiceImpl implements OrganizationService {
         if (!user.getEmail().equals(organization.getCreatedBy())) {
             throw new ApiException(ErrorCode.USER_NO_PERMISSION,
                     "This action requires organization creator privileges.");
+        }
+    }
+
+    private void authorizeUserIsOrgManagerOrDeptManager(User user) {
+        boolean isOrgManager = user.getIsOrganizationManager() != null && user.getIsOrganizationManager();
+        boolean isDeptManager = user.getIsDeptManager() != null && user.getIsDeptManager();
+
+        if (!isOrgManager && !isDeptManager) {
+            throw new ApiException(ErrorCode.USER_NO_PERMISSION, "User must be an organization or department manager.");
         }
     }
 }

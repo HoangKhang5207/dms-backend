@@ -5,6 +5,7 @@ import com.genifast.dms.dto.request.RefreshTokenRequestDto;
 import com.genifast.dms.dto.request.ResetPasswordDto;
 import com.genifast.dms.dto.request.ResetPasswordRequestDto;
 import com.genifast.dms.dto.response.LoginResponseDto;
+import com.genifast.dms.dto.response.UserResponse;
 import com.genifast.dms.dto.request.SignUpRequestDto;
 import com.genifast.dms.dto.request.SocialLoginRequestDto;
 import com.genifast.dms.common.constant.ErrorCode;
@@ -38,6 +39,20 @@ public class UserServiceImpl implements UserService {
     private final EmailService emailService;
     private final ApplicationProperties applicationProperties;
     private final RefreshTokenService refreshTokenService;
+
+    @Override
+    public UserResponse getMyInfo() {
+        // Lấy email của user đang đăng nhập từ security context
+        String currentUserEmail = JwtUtils.getCurrentUserLogin()
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.INVALID_USER.getMessage()));
+
+        // Tìm thông tin đầy đủ của user trong DB
+        User user = userRepository.findByEmail(currentUserEmail)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.INVALID_USER.getMessage()));
+
+        // Map từ Entity sang DTO và trả về
+        return userMapper.toUserResponse(user);
+    }
 
     @Override
     @Transactional

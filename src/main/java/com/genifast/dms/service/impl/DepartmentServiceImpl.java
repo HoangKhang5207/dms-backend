@@ -112,8 +112,9 @@ public class DepartmentServiceImpl implements DepartmentService {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
         Department department = findDepartmentById(departmentId);
 
-        // Authorize: Chỉ manager của tổ chức mới được sửa phòng ban
-        authorizeUserIsOrgManager(currentUser, department.getOrganization().getId());
+        // Authorize: Org Manager được sửa mọi phòng ban, Dept Manager chỉ được sửa
+        // phòng ban của mình
+        authorizeUserCanUpdateDepartment(currentUser, department);
 
         // Nếu tên được cập nhật, kiểm tra trùng lặp trong cùng tổ chức
         if (updateDto.getName() != null && !updateDto.getName().equals(department.getName())) {
@@ -164,5 +165,33 @@ public class DepartmentServiceImpl implements DepartmentService {
         return departmentRepository.findById(deptId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DEPARTMENT_NOT_FOUND,
                         ErrorMessage.DEPARTMENT_NOT_FOUND.getMessage()));
+    }
+
+    private void authorizeUserCanUpdateDepartment(User user, Department department) {
+        // Điều kiện tiên quyết: User phải thuộc tổ chức
+        checkUserAccessToOrganization(user, department.getOrganization().getId());
+
+        boolean isOrgManager = user.getIsOrganizationManager() != null && user.getIsOrganizationManager();
+        if (isOrgManager) {
+            return; // Quản lý tổ chức có toàn quyền sửa
+        }
+
+        boolean isDeptManager = user.getIsDeptManager() != null && user.getIsDeptManager();
+        if (isDeptManager) {
+            if (user.getDepartment() != null && user.getDepartment().getId().equals(department.getId())) {
+                return; // Quản lý phòng ban được sửa phòng ban của chính mình
+            }
+        }
+
+        // Nếu không thỏa mãn các điều kiện trên, ném lỗi
+        throw new ApiException(ErrorCode.USER_NO_PERMISSION, "User does not have permission to edit this department.");
+    }
+
+    // Helper method này cần được tạo ra hoặc đảm bảo đã có
+    private void checkUserAccessToOrganization(User user, Long orgId) {
+        if (user.getOrganization() == null || !user.getOrganization().getId().equals(orgId)) {
+            throw new ApiException(ErrorCode.CANNOT_ACCESS_ORGANIZATION,
+                    ErrorMessage.CANNOT_ACCESS_ORGANIZATION.getMessage());
+        }
     }
 }
