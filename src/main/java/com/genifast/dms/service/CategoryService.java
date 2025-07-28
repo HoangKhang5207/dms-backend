@@ -9,6 +9,7 @@ import com.genifast.dms.common.dto.StatusUpdateDto;
 import com.genifast.dms.dto.request.CategoryCreateRequest;
 import com.genifast.dms.dto.request.CategoryUpdateRequest;
 import com.genifast.dms.dto.response.CategoryResponse;
+import com.genifast.dms.dto.response.DocumentResponse;
 
 public interface CategoryService {
     CategoryResponse createCategory(CategoryCreateRequest createDto);
@@ -22,4 +23,6 @@ public interface CategoryService {
     Page<CategoryResponse> getCategoriesByDepartment(Long departmentId, Pageable pageable);
 
     List<CategoryResponse> searchCategoriesByName(Long departmentId, String name);
+
+    Page<DocumentResponse> getDocumentsByCategory(Long categoryId, Pageable pageable);
 }

@@ -8,6 +8,7 @@ import com.genifast.dms.common.exception.StorageFileNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.BadCredentialsException;
@@ -134,5 +135,11 @@ public class GlobalExceptionHandler {
                                 .path(request.getRequestURI())
                                 .build();
                 return new ResponseEntity<>(errorResponse, HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+
+        @ExceptionHandler(ClientAbortException.class)
+        public void handleClientAbort(ClientAbortException ex) {
+                // Không coi là lỗi nghiêm trọng, chỉ ghi debug nếu cần
+                log.debug("Client aborted connection while streaming resource", ex);
         }
 }

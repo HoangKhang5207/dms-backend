@@ -1,6 +1,9 @@
 package com.genifast.dms.repository;
 
 import com.genifast.dms.entity.Document;
+
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Modifying;
@@ -33,7 +36,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long>, JpaSp
     /**
      * Lấy danh sách document theo category. Tương ứng GetDocumentsByCategoryID.
      */
-    List<Document> findByCategoryId(Long categoryId);
+    Page<Document> findByCategoryIdAndStatus(Long categoryId, int status, Pageable pageable);
 
     /**
      * Lấy danh sách document theo department. Tương ứng GetDocumentsByDepartmentID.

@@ -16,10 +16,13 @@ import com.genifast.dms.common.utils.JwtUtils;
 import com.genifast.dms.dto.request.CategoryCreateRequest;
 import com.genifast.dms.dto.request.CategoryUpdateRequest;
 import com.genifast.dms.dto.response.CategoryResponse;
+import com.genifast.dms.dto.response.DocumentResponse;
 import com.genifast.dms.entity.Category;
 import com.genifast.dms.entity.Department;
+import com.genifast.dms.entity.Document;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.mapper.CategoryMapper;
+import com.genifast.dms.mapper.DocumentMapper;
 import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
@@ -39,6 +42,7 @@ public class CategoryServiceImpl implements CategoryService {
     private final DocumentRepository documentRepository;
     private final UserRepository userRepository;
     private final CategoryMapper categoryMapper; // MapStruct Mapper
+    private final DocumentMapper documentMapper;
 
     @Override
     @Transactional
@@ -160,6 +164,21 @@ public class CategoryServiceImpl implements CategoryService {
         return categories.stream().map(categoryMapper::toCategoryResponse).collect(Collectors.toList());
     }
 
+    @Override
+    public Page<DocumentResponse> getDocumentsByCategory(Long categoryId, Pageable pageable) {
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        Category category = findCategoryById(categoryId);
+
+        // Authorize: Người dùng phải là thành viên của tổ chức chứa thư mục này
+        authorizeUserIsMemberOfOrg(currentUser, category.getOrganization().getId());
+
+        // Gọi repository để lấy tài liệu
+        Page<Document> documentPage = documentRepository.findByCategoryIdAndStatus(categoryId, 1, pageable);
+
+        // Map kết quả sang DTO
+        return documentPage.map(documentMapper::toDocumentResponse);
+    }
+
     // --- Helper Methods ---
     private void authorizeUserIsDeptManagerOrOrgManager(User user, Department department) {
         // User phải thuộc tổ chức của phòng ban này
@@ -169,7 +188,8 @@ public class CategoryServiceImpl implements CategoryService {
                     ErrorMessage.USER_NOT_IN_ORGANIZATION.getMessage());
         }
         // User phải là Manager của tổ chức HOẶC Manager của chính phòng ban đó
-        if (!user.getIsOrganizationManager() && !user.getIsDeptManager()) {
+        if ((user.getIsOrganizationManager() == null || !user.getIsOrganizationManager()) &&
+                (user.getIsDeptManager() == null || !user.getIsDeptManager())) {
             throw new ApiException(ErrorCode.USER_NO_PERMISSION, "User must be a department or organization manager.");
         }
         // Nếu là manager phòng ban, phải đúng phòng ban mình quản lý
