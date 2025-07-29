@@ -34,9 +34,8 @@ public class Comment {
     @JoinColumn(name = "parent_comment_id")
     private Comment parentComment;
 
-    @Enumerated(EnumType.ORDINAL)
     @Column(name = "status")
-    private CommentStatus status;
+    private Integer status;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "doc_id", nullable = false)

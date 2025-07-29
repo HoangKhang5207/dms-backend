@@ -33,9 +33,8 @@ public class Transaction {
 
     private Long amount;
 
-    @Enumerated(EnumType.ORDINAL)
     @Column(name = "status")
-    private TransactionStatus status;
+    private Integer status;
 
     @Column(name = "bank_response_code", length = 50)
     private String bankResponseCode;

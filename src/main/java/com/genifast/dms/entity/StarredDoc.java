@@ -34,9 +34,8 @@ public class StarredDoc {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Enumerated(EnumType.ORDINAL)
     @Column(name = "status")
-    private StarredDocStatus status;
+    private Integer status;
 
     @PreUpdate
     protected void onUpdate() {

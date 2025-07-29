@@ -32,13 +32,11 @@ public class UserDocument {
     @JoinColumn(name = "document_id", nullable = false)
     private Document document;
 
-    @Enumerated(EnumType.ORDINAL)
     @Column(name = "type")
-    private UserDocType type;
+    private Integer type;
 
-    @Enumerated(EnumType.ORDINAL)
     @Column(name = "status")
-    private CommonStatus status;
+    private Integer status;
 
     @Column(name = "decentralized_by", length = 30)
     private String decentralizedBy;
