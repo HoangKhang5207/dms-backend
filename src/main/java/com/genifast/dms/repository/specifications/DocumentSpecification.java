@@ -10,6 +10,7 @@ import jakarta.persistence.criteria.Subquery;
 
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -88,23 +89,44 @@ public class DocumentSpecification {
 
     // Các specification cho việc lọc động
     public static Specification<Document> titleContains(String title) {
-        return (root, query, cb) -> title == null ? cb.conjunction()
-                : cb.like(cb.lower(root.get("title")), "%" + title.toLowerCase() + "%");
+        return (root, query, cb) -> {
+            if (!StringUtils.hasText(title)) {
+                return cb.conjunction(); // Trả về điều kiện "luôn đúng" nếu title rỗng
+            }
+            return cb.like(cb.lower(root.get("title")), "%" + title.toLowerCase() + "%");
+        };
     }
 
     public static Specification<Document> hasType(String type) {
-        return (root, query, cb) -> type == null ? cb.conjunction() : cb.equal(root.get("type"), type);
+        return (root, query, cb) -> {
+            if (!StringUtils.hasText(type)) {
+                return cb.conjunction();
+            }
+            return cb.equal(root.get("type"), type);
+        };
+    }
+
+    public static Specification<Document> hasCreatedBy(String createdByEmail) {
+        return (root, query, cb) -> {
+            if (!StringUtils.hasText(createdByEmail)) {
+                return cb.conjunction();
+            }
+            return cb.equal(root.get("createdBy"), createdByEmail);
+        };
     }
 
     public static Specification<Document> createdBetween(Instant from, Instant to) {
         return (root, query, cb) -> {
-            if (from == null && to == null)
+            if (from == null && to == null) {
                 return cb.conjunction();
-            if (from != null && to != null)
-                return cb.between(root.get("createdAt"), from, to);
-            if (from != null)
+            }
+            if (from == null) {
+                return cb.lessThanOrEqualTo(root.get("createdAt"), to);
+            }
+            if (to == null) {
                 return cb.greaterThanOrEqualTo(root.get("createdAt"), from);
-            return cb.lessThanOrEqualTo(root.get("createdAt"), to);
+            }
+            return cb.between(root.get("createdAt"), from, to);
         };
     }
 }

@@ -149,6 +149,7 @@ public class DocumentServiceImpl implements DocumentService {
         // Nối thêm các điều kiện lọc
         spec = spec.and(DocumentSpecification.titleContains(filterDto.getTitle()));
         spec = spec.and(DocumentSpecification.hasType(filterDto.getType()));
+        spec = spec.and(DocumentSpecification.hasCreatedBy(filterDto.getCreatedBy()));
         spec = spec.and(
                 DocumentSpecification.createdBetween(filterDto.getCreatedFromDate(), filterDto.getCreatedToDate()));
 
