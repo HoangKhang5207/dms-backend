@@ -50,10 +50,10 @@ public class Document {
     @Column(length = 255)
     private String description;
 
-    @Column(name = "created_at")
+    @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
-    @Column(name = "updated_at")
+    @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
     @Column(name = "file_path", length = 255)
@@ -87,6 +87,12 @@ public class Document {
 
     @Column(name = "title_unaccent", columnDefinition = "TEXT")
     private String titleUnaccent;
+
+    @Column(name = "password", length = 255)
+    private String password;
+
+    @Column(name = "photo_id", columnDefinition = "TEXT")
+    private String photoId;
 
     @OneToMany(mappedBy = "document", fetch = FetchType.LAZY)
     private Set<PrivateDoc> privateDocuments = new HashSet<>();

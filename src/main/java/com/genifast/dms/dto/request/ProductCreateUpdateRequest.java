@@ -17,7 +17,7 @@ public class ProductCreateUpdateRequest {
 
     @NotNull(message = "Price is required")
     @PositiveOrZero
-    private Double price;
+    private Long price;
 
     @NotNull(message = "Quantity is required")
     @PositiveOrZero

@@ -12,7 +12,7 @@ public class ProductResponse {
     private String name;
     private String description;
     private String type;
-    private Double price;
+    private Long price;
     private Long quantity;
 
     @JsonProperty("created_at")

@@ -61,6 +61,10 @@ public class Organization {
     @Column(name = "token_used")
     private Long tokenUsed;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_organization_id")
+    private Organization parentOrganization;
+
     @OneToMany(mappedBy = "organization", fetch = FetchType.LAZY)
     private Set<User> users = new HashSet<>();
 

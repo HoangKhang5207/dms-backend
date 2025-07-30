@@ -2,9 +2,6 @@ package com.genifast.dms.entity;
 
 import java.time.Instant;
 
-import com.genifast.dms.entity.enums.CommonStatus;
-import com.genifast.dms.entity.enums.UserDocType;
-
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

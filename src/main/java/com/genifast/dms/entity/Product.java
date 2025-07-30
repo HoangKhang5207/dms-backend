@@ -32,7 +32,7 @@ public class Product {
 
     @Column(length = 50)
     private String type;
-    private Double price;
+    private Long price;
     private Long quantity;
 
     @Column(name = "created_at")

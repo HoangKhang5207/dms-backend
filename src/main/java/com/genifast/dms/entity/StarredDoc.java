@@ -2,8 +2,6 @@ package com.genifast.dms.entity;
 
 import java.time.LocalDateTime;
 
-import com.genifast.dms.entity.enums.StarredDocStatus;
-
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

@@ -30,6 +30,10 @@ public class Notification {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "doc_id")
+    private Document document;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
