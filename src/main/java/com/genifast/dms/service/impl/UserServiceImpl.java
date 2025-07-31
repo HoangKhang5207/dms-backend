@@ -41,8 +41,6 @@ public class UserServiceImpl implements UserService {
     private final ApplicationProperties applicationProperties;
     private final RefreshTokenService refreshTokenService;
 
-    private String passwordForRefreshToken = "";
-
     @Override
     public UserResponse getMyInfo() {
         // Lấy email của user đang đăng nhập từ security context
@@ -81,21 +79,11 @@ public class UserServiceImpl implements UserService {
         // 5. Lưu vào CSDL
         userRepository.save(user);
 
-        // 6. Tạo user trên Keycloak (ở trạng thái disabled)
-        try {
-            jwtUtils.createUserInKeycloak(user, signUpRequestDto.getPassword());
-            log.info("User {} created in Keycloak (disabled).", user.getEmail());
-        } catch (Exception e) {
-            log.error("Failed to create user in Keycloak during signup.", e);
-            // Quan trọng: Ném ra một exception để transaction được rollback,
-            // tránh trường hợp user tồn tại ở DB cục bộ mà không có trên Keycloak.
-            throw new ApiException(ErrorCode.INTERNAL_ERROR, "Failed to provision user to identity provider.");
-        }
-
-        // 7. Gửi email xác thực (giữ nguyên logic nghiệp vụ)
+        // 6. Gửi email xác thực (logic gửi mail sẽ được thêm vào sau)
         log.info("User {} registered successfully. Sending verification email.", user.getEmail());
         emailService.sendVerifyEmailCreateAccount(user.getEmail(),
                 new VerifyEmailInfo(applicationProperties.email().linkVerifyEmail()));
+
     }
 
     @Override
@@ -108,8 +96,6 @@ public class UserServiceImpl implements UserService {
         if (!passwordEncoder.matches(loginRequestDto.getPassword(), user.getPassword())) {
             throw new ApiException(ErrorCode.INVALID_USER, ErrorMessage.INVALID_USER.getMessage());
         }
-        // Lưu mật khẩu để sử dụng trong việc tạo Refresh Token
-        this.passwordForRefreshToken = loginRequestDto.getPassword();
 
         // 3. Kiểm tra trạng thái tài khoản
         if (user.getStatus() != 1) {
@@ -118,58 +104,28 @@ public class UserServiceImpl implements UserService {
         }
 
         // 4. Tạo Access Token
-        // String accessToken = jwtUtils.generateAccessToken(user);
+        String accessToken = jwtUtils.generateAccessToken(user);
 
         // 5. Tạo/Cập nhật Refresh Token (sẽ implement chi tiết)
         String refreshToken = refreshTokenService.createRefreshToken(user);
 
         log.info("User {} logged in successfully.", user.getEmail());
 
-        try {
-            log.info("User {} authenticated locally. Fetching tokens from Keycloak...", user.getEmail());
-
-            // 6. Tạo Access Token
-            String accessToken = jwtUtils.getTokensFromKeycloak(loginRequestDto.getEmail(),
-                    loginRequestDto.getPassword());
-
-            return LoginResponseDto.builder()
-                    .accessToken(accessToken)
-                    .refreshToken(refreshToken)
-                    .build();
-        } catch (Exception e) {
-            log.error("Keycloak token retrieval failed for user {}: {}", loginRequestDto.getEmail(), e.getMessage());
-            // Lỗi này thường xảy ra nếu user/pass đúng ở DB cục bộ nhưng sai trên Keycloak
-            // (do mất đồng bộ), hoặc Keycloak bị lỗi.
-            throw new ApiException(ErrorCode.INTERNAL_ERROR, "Authentication with identity provider failed.");
-        }
-
-        // return LoginResponseDto.builder()
-        // .accessToken(accessToken)
-        // .refreshToken(refreshToken)
-        // .build();
+        return LoginResponseDto.builder()
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
     }
 
     @Override
-    @Transactional
     public void verifyEmail(String email) {
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new ApiException(ErrorCode.INVALID_EMAIL,
                         ErrorMessage.INVALID_EMAIL.getMessage()));
 
-        // 1. Cập nhật trạng thái trong DB cục bộ
         user.setStatus(1); // 1 = Active
         userRepository.save(user);
-        log.info("Email {} verified successfully in local DB.", email);
-
-        // 2. Kích hoạt user tương ứng trên Keycloak
-        try {
-            jwtUtils.enableUserInKeycloak(email);
-            log.info("User {} enabled successfully in Keycloak.", email);
-        } catch (Exception e) {
-            log.error("Failed to enable user {} in Keycloak.", email, e);
-            // Ném exception để rollback transaction
-            throw new ApiException(ErrorCode.INTERNAL_ERROR, "Failed to activate user in identity provider.");
-        }
+        log.info("Email {} verified successfully.", email);
     }
 
     @Override
@@ -212,26 +168,15 @@ public class UserServiceImpl implements UserService {
         User user = refreshTokenService.verifyAndGetUser(refreshTokenDto.getRefreshToken());
 
         // Tạo access token mới
-        // String newAccessToken = jwtUtils.generateAccessToken(user);
+        String newAccessToken = jwtUtils.generateAccessToken(user);
 
         // Tạo refresh token mới (xoay vòng token để tăng bảo mật)
-        String refreshToken = refreshTokenService.createRefreshToken(user);
+        String newRefreshToken = refreshTokenService.createRefreshToken(user);
 
-        try {
-            // Tạo Access Token
-            String accessToken = jwtUtils.getTokensFromKeycloak(user.getEmail(),
-                    passwordForRefreshToken);
-
-            return LoginResponseDto.builder()
-                    .accessToken(accessToken)
-                    .refreshToken(refreshToken)
-                    .build();
-        } catch (Exception e) {
-            log.error("Keycloak token retrieval failed for user {}: {}", user.getEmail(), e.getMessage());
-            // Lỗi này thường xảy ra nếu user/pass đúng ở DB cục bộ nhưng sai trên Keycloak
-            // (do mất đồng bộ), hoặc Keycloak bị lỗi.
-            throw new ApiException(ErrorCode.INTERNAL_ERROR, "Authentication with identity provider failed.");
-        }
+        return LoginResponseDto.builder()
+                .accessToken(newAccessToken)
+                .refreshToken(newRefreshToken)
+                .build();
     }
 
     @Override

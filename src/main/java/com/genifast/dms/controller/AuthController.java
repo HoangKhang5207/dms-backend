@@ -23,7 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final UserService userService;
-    // private final AuthenticationManagerBuilder authenticationManagerBuilder;
+    private final AuthenticationManagerBuilder authenticationManagerBuilder;
 
     @PostMapping("/signup")
     public ResponseEntity<String> signUp(@Valid @RequestBody SignUpRequestDto signUpRequestDto) {
@@ -35,16 +35,14 @@ public class AuthController {
     @PostMapping("/login")
     public ResponseEntity<LoginResponseDto> login(@Valid @RequestBody LoginRequestDto loginRequestDto) {
         // Nạp input gồm username và password vào Security
-        // UsernamePasswordAuthenticationToken authenticationToken = new
-        // UsernamePasswordAuthenticationToken(
-        // loginRequestDto.getEmail(), loginRequestDto.getPassword());
+        UsernamePasswordAuthenticationToken authenticationToken = new UsernamePasswordAuthenticationToken(
+                loginRequestDto.getEmail(), loginRequestDto.getPassword());
 
-        // // xác thực người dùng => cần viết hàm loadUserByUsername
-        // Authentication authentication =
-        // authenticationManagerBuilder.getObject().authenticate(authenticationToken);
+        // xác thực người dùng => cần viết hàm loadUserByUsername
+        Authentication authentication = authenticationManagerBuilder.getObject().authenticate(authenticationToken);
 
-        // // set thông tin người dùng đăng nhập vào SecurityContext
-        // SecurityContextHolder.getContext().setAuthentication(authentication);
+        // set thông tin người dùng đăng nhập vào SecurityContext
+        SecurityContextHolder.getContext().setAuthentication(authentication);
 
         LoginResponseDto response = userService.login(loginRequestDto);
         return ResponseEntity.ok(response);

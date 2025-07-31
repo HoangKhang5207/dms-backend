@@ -9,10 +9,8 @@ import com.nimbusds.jose.jwk.source.JWKSource;
 import com.nimbusds.jose.proc.SecurityContext;
 
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.Resource;
 import org.springframework.security.config.Customizer;
@@ -21,6 +19,8 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -40,22 +40,22 @@ import java.security.interfaces.RSAPrivateKey;
 import java.security.interfaces.RSAPublicKey;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.ArrayList;
+import java.util.List;
 
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity(prePostEnabled = true)
 public class SecurityConfig {
 
-    // private final Resource accessTokenPublicResource;
-    // private final Resource accessTokenPrivateResource;
+    private final Resource accessTokenPublicResource;
+    private final Resource accessTokenPrivateResource;
     private final Resource resetPassPublicResource;
     private final Resource resetPassPrivateResource;
 
     public SecurityConfig(ApplicationProperties applicationProperties) {
-        // this.accessTokenPublicResource =
-        // applicationProperties.jwt().accessTokenPublicKey();
-        // this.accessTokenPrivateResource =
-        // applicationProperties.jwt().accessTokenPrivateKey();
+        this.accessTokenPublicResource = applicationProperties.jwt().accessTokenPublicKey();
+        this.accessTokenPrivateResource = applicationProperties.jwt().accessTokenPrivateKey();
         this.resetPassPublicResource = applicationProperties.resetPassword().publicKey();
         this.resetPassPrivateResource = applicationProperties.resetPassword().privateKey();
     }
@@ -68,7 +68,6 @@ public class SecurityConfig {
     @Bean
     @Order(1) // Ưu tiên cao hơn
     public SecurityFilterChain resetPasswordSecurityFilterChain(HttpSecurity http,
-            @Qualifier("passwordResetTokenDecoder") JwtDecoder passwordResetTokenDecoder,
             CustomAuthenticationEntryPoint customAuthenticationEntryPoint) throws Exception {
         return http
                 .securityMatcher("/api/v1/reset-password") // Chỉ áp dụng cho endpoint này
@@ -77,7 +76,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/api/v1/reset-password").permitAll()
                         .anyRequest().authenticated())
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(passwordResetTokenDecoder))
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(passwordResetTokenDecoder()))
                         .authenticationEntryPoint(customAuthenticationEntryPoint))
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .build();
@@ -86,7 +85,6 @@ public class SecurityConfig {
     @Bean
     @Order(2)
     public SecurityFilterChain securityFilterChain(HttpSecurity http,
-            JwtDecoder keycloakJwtDecoder,
             CustomAuthenticationEntryPoint customAuthenticationEntryPoint) throws Exception {
 
         String[] whiteList = {
@@ -106,7 +104,8 @@ public class SecurityConfig {
                         .requestMatchers(whiteList).permitAll()
                         .anyRequest().authenticated())
                 // Cấu hình JWT-based security
-                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(keycloakJwtDecoder))
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(jwt -> jwt.decoder(accessTokenDecoder())
+                        .jwtAuthenticationConverter(jwtAuthenticationConverter()))
                         .authenticationEntryPoint(customAuthenticationEntryPoint))
                 // Không tạo session, mỗi request phải tự xác thực
                 .formLogin(l -> l.disable())
@@ -114,79 +113,78 @@ public class SecurityConfig {
                 .build();
     }
 
-    // Bean này rất quan trọng: Nó sẽ lấy các "roles" từ trong JWT của Keycloak
-    // và chuyển chúng thành các `GrantedAuthority` để Spring Security hiểu được.
-    @Bean
-    public JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
-        // Cấu hình để lấy roles từ claim 'realm_access.roles' mà Keycloak trả về
-        grantedAuthoritiesConverter.setAuthoritiesClaimName("realm_access");
-        grantedAuthoritiesConverter.setAuthorityPrefix("ROLE_");
-
-        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
-        jwtAuthenticationConverter.setPrincipalClaimName("preferred_username");
-        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
-        return jwtAuthenticationConverter;
-    }
-
-    @Bean
-    @Primary // Đánh dấu đây là JwtDecoder mặc định
-    public JwtDecoder keycloakJwtDecoder(
-            @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String jwkSetUri) {
-        return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+    // Bean mới để chuyển đổi claims trong JWT thành Roles
+    private JwtAuthenticationConverter jwtAuthenticationConverter() {
+        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
+            // Lấy claim 'is_admin' từ User entity (cần được thêm vào khi tạo token)
+            boolean isAdmin = jwt.getClaimAsBoolean("is_admin");
+            List<GrantedAuthority> authorities = new ArrayList<>();
+            authorities.add(new SimpleGrantedAuthority("ROLE_USER")); // Mọi người đều là USER
+            if (isAdmin) {
+                authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
+            }
+            return authorities;
+        });
+        return converter;
     }
 
     // @Bean
-    // @Qualifier("accessTokenDecoder")
-    // public JwtDecoder accessTokenDecoder() {
-    // return NimbusJwtDecoder.withPublicKey(accessTokenPublicKey()).build();
+    // @Primary // Đánh dấu đây là JwtDecoder mặc định
+    // public JwtDecoder keycloakJwtDecoder(
+    // @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String
+    // jwkSetUri) {
+    // return NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
     // }
 
-    // @Bean
-    // @Qualifier("accessTokenEncoder")
-    // public JwtEncoder accessTokenEncoder() {
-    // JWK jwk = new
-    // RSAKey.Builder(accessTokenPublicKey()).privateKey(accessTokenPrivateKey()).build();
-    // JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
-    // return new NimbusJwtEncoder(jwks);
-    // }
+    @Bean
+    @Qualifier("accessTokenDecoder")
+    public JwtDecoder accessTokenDecoder() {
+        return NimbusJwtDecoder.withPublicKey(accessTokenPublicKey()).build();
+    }
 
-    // private RSAPublicKey accessTokenPublicKey() {
-    // try {
-    // String pem =
-    // StreamUtils.copyToString(accessTokenPublicResource.getInputStream(),
-    // StandardCharsets.UTF_8);
-    // byte[] der = PemUtils.parseDerFromPem(pem,
-    // "-----BEGIN PUBLIC KEY-----", "-----END PUBLIC KEY-----");
-    // X509EncodedKeySpec spec = new X509EncodedKeySpec(der);
-    // return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(spec);
-    // } catch (IOException e) {
-    // throw new IllegalStateException(
-    // "Cannot read Access Token public key from " + accessTokenPublicResource, e);
-    // } catch (GeneralSecurityException e) {
-    // throw new IllegalStateException(
-    // "Failed to parse Access Token public key", e);
-    // }
-    // }
+    @Bean
+    @Qualifier("accessTokenEncoder")
+    public JwtEncoder accessTokenEncoder() {
+        JWK jwk = new RSAKey.Builder(accessTokenPublicKey()).privateKey(accessTokenPrivateKey()).build();
+        JWKSource<SecurityContext> jwks = new ImmutableJWKSet<>(new JWKSet(jwk));
+        return new NimbusJwtEncoder(jwks);
+    }
 
-    // private RSAPrivateKey accessTokenPrivateKey() {
-    // try {
-    // String pem =
-    // StreamUtils.copyToString(accessTokenPrivateResource.getInputStream(),
-    // StandardCharsets.UTF_8);
-    // byte[] der = PemUtils.parseDerFromPem(pem,
-    // "-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----");
-    // PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(der);
-    // return (RSAPrivateKey) KeyFactory.getInstance("RSA").generatePrivate(spec);
-    // } catch (IOException e) {
-    // throw new IllegalStateException(
-    // "Cannot read Access Token private key from " + accessTokenPrivateResource,
-    // e);
-    // } catch (GeneralSecurityException e) {
-    // throw new IllegalStateException(
-    // "Failed to parse Access Token private key", e);
-    // }
-    // }
+    private RSAPublicKey accessTokenPublicKey() {
+        try {
+            String pem = StreamUtils.copyToString(accessTokenPublicResource.getInputStream(),
+                    StandardCharsets.UTF_8);
+            byte[] der = PemUtils.parseDerFromPem(pem,
+                    "-----BEGIN PUBLIC KEY-----", "-----END PUBLIC KEY-----");
+            X509EncodedKeySpec spec = new X509EncodedKeySpec(der);
+            return (RSAPublicKey) KeyFactory.getInstance("RSA").generatePublic(spec);
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Cannot read Access Token public key from " + accessTokenPublicResource, e);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(
+                    "Failed to parse Access Token public key", e);
+        }
+    }
+
+    private RSAPrivateKey accessTokenPrivateKey() {
+        try {
+            String pem = StreamUtils.copyToString(accessTokenPrivateResource.getInputStream(),
+                    StandardCharsets.UTF_8);
+            byte[] der = PemUtils.parseDerFromPem(pem,
+                    "-----BEGIN PRIVATE KEY-----", "-----END PRIVATE KEY-----");
+            PKCS8EncodedKeySpec spec = new PKCS8EncodedKeySpec(der);
+            return (RSAPrivateKey) KeyFactory.getInstance("RSA").generatePrivate(spec);
+        } catch (IOException e) {
+            throw new IllegalStateException(
+                    "Cannot read Access Token private key from " + accessTokenPrivateResource,
+                    e);
+        } catch (GeneralSecurityException e) {
+            throw new IllegalStateException(
+                    "Failed to parse Access Token private key", e);
+        }
+    }
 
     @Bean
     @Qualifier("passwordResetTokenDecoder")
