@@ -66,6 +66,7 @@ public class Organization {
     private Organization parentOrganization;
 
     @OneToMany(mappedBy = "organization", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<User> users = new HashSet<>();
 
     @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL, fetch = FetchType.LAZY)

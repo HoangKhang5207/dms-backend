@@ -33,10 +33,12 @@ public class Role {
     private String description;
 
     @Column(name = "is_inheritable", nullable = false)
+    @Builder.Default
     private Boolean isInheritable = false;
 
     @ManyToMany(fetch = FetchType.EAGER) // EAGER để khi load Role sẽ có ngay danh sách Permission
     @JoinTable(name = "role_permissions", joinColumns = @JoinColumn(name = "role_id"), inverseJoinColumns = @JoinColumn(name = "permission_id"))
+    @Builder.Default
     private Set<Permission> permissions = new HashSet<>();
 
     @ManyToMany(mappedBy = "roles")

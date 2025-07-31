@@ -45,9 +45,11 @@ public class Department {
     private Integer status;
 
     @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<User> users = new HashSet<>();
 
     @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<Category> categories = new HashSet<>();
 
     @PrePersist

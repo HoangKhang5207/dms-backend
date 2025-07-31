@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
+import java.util.Optional;
 
 /**
  * Repository interface cho Document entity.
@@ -66,4 +68,10 @@ public interface DocumentRepository extends JpaRepository<Document, Long>, JpaSp
     @Modifying
     @Query("UPDATE Document d SET d.status = :status WHERE d.department.id = :departmentId")
     void updateStatusByDepartmentId(@Param("departmentId") Long departmentId, @Param("status") int status);
+
+    Optional<Document> findByFileId(String fileId);
+
+    List<Document> findAllByOrderByCreatedAtDesc();
+
+    Optional<Document> findByFilePath(String filePath);
 }
