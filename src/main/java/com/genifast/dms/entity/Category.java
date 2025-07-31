@@ -56,9 +56,11 @@ public class Category {
     private Department department;
 
     @OneToMany(mappedBy = "parentCategory", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<Category> childCategories = new HashSet<>();
 
     @OneToMany(mappedBy = "category", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<Document> documents = new HashSet<>();
 
     @PrePersist

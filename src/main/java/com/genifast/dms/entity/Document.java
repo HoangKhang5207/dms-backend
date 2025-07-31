@@ -95,6 +95,7 @@ public class Document {
     private String photoId;
 
     @OneToMany(mappedBy = "document", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<PrivateDoc> privateDocuments = new HashSet<>();
 
     @PrePersist

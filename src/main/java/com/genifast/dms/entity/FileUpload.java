@@ -15,18 +15,18 @@ import lombok.Setter;
 @AllArgsConstructor
 @Builder
 public class FileUpload {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "document_id", nullable = false)
-    private Document document;
+    @Column(name = "document_id", nullable = false)
+    private Long documentId;
 
-    @Column(name = "file_path", nullable = false, length = 255)
+    @Column(name = "file_path", nullable = false)
     private String filePath;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
-    private User user;
+    @Column(name = "user_id")
+    private Long userId;
+
 }

@@ -74,10 +74,12 @@ public class User {
     private LocalDateTime lastLoginAt;
 
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
+    @Builder.Default
     private Set<PrivateDoc> privateDocuments = new HashSet<>();
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "user_roles", joinColumns = @JoinColumn(name = "user_id"), inverseJoinColumns = @JoinColumn(name = "role_id"))
+    @Builder.Default
     private Set<Role> roles = new HashSet<>();
 
     @PrePersist
