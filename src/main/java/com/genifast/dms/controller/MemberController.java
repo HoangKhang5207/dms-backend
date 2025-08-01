@@ -12,6 +12,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -22,6 +23,7 @@ public class MemberController {
     private final OrganizationService organizationService;
 
     @GetMapping("/organizations/{orgId}/members")
+    @PreAuthorize("hasRole('MEMBER') and hasAuthority('organization:view-members')")
     public ResponseEntity<Page<UserResponse>> getOrganizationMembers(
             @PathVariable Long orgId,
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -29,6 +31,7 @@ public class MemberController {
     }
 
     @GetMapping("/departments/{deptId}/members")
+    @PreAuthorize("(hasRole('DEPARTMENT_MANAGER') or hasRole('ORGANIZATION_MANAGER')) and hasAuthority('department:view-members')")
     public ResponseEntity<Page<UserResponse>> getDepartmentMembers(
             @PathVariable Long deptId,
             @PageableDefault(size = 10, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable) {
@@ -36,6 +39,7 @@ public class MemberController {
     }
 
     @PutMapping("/organizations/{orgId}/members/department-manager")
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('organization:update-manager')")
     public ResponseEntity<String> updateDepartmentManagerRole(
             @PathVariable Long orgId,
             @Valid @RequestBody DeptManagerUpdateRequest deptManagerUpdateRequest) {

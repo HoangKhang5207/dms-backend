@@ -5,6 +5,7 @@ import com.genifast.dms.entity.User;
 
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -16,7 +17,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.util.Collection;
 import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Service
 public class JwtUtils {
@@ -36,8 +40,13 @@ public class JwtUtils {
         this.applicationProperties = applicationProperties;
     }
 
-    public String generateAccessToken(User user) {
+    public String generateAccessToken(User user, Collection<? extends GrantedAuthority> authorities) {
         Instant now = Instant.now();
+
+        // Chuyển danh sách GrantedAuthority thành danh sách chuỗi String
+        Set<String> scope = authorities.stream()
+                .map(GrantedAuthority::getAuthority)
+                .collect(Collectors.toSet());
 
         JwtClaimsSet claims = JwtClaimsSet.builder()
                 .issuer("GeniFast-Search-Java")
@@ -48,6 +57,7 @@ public class JwtUtils {
                 .claim("name", user.getLastName() + " " + user.getFirstName())
                 .claim("email", user.getEmail())
                 .claim("is_admin", user.getIsAdmin())
+                .claim("scope", scope)
                 .claim("aud", "user_credentials")
                 .build();
 

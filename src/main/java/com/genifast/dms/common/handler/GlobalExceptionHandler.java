@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -88,9 +89,12 @@ public class GlobalExceptionHandler {
                 return new ResponseEntity<>(errorResponse, HttpStatus.NOT_FOUND);
         }
 
-        @ExceptionHandler(AuthorizationDeniedException.class)
+        @ExceptionHandler(value = {
+                        AuthorizationDeniedException.class,
+                        AccessDeniedException.class
+        })
         public ResponseEntity<ErrorResponseDTO> handleAuthorizationDeniedException(
-                        AuthorizationDeniedException ex, HttpServletRequest request) {
+                        Exception ex, HttpServletRequest request) {
                 ErrorResponseDTO errorResponse = ErrorResponseDTO.builder()
                                 .timestamp(LocalDateTime.now())
                                 .status(HttpStatus.FORBIDDEN.value())

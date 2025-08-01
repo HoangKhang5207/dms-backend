@@ -1,5 +1,7 @@
 package com.genifast.dms.service;
 
+import java.util.Set;
+
 import com.genifast.dms.dto.request.LoginRequestDto;
 import com.genifast.dms.dto.request.RefreshTokenRequestDto;
 import com.genifast.dms.dto.request.ResetPasswordDto;
@@ -12,6 +14,12 @@ import com.genifast.dms.dto.request.SocialLoginRequestDto;
 public interface UserService {
 
     UserResponse getMyInfo();
+
+    UserResponse updateUserRoles(Long userId, Set<Long> roleIds);
+
+    void grantPermission(Long userId, Long permissionId);
+
+    void revokePermission(Long userId, Long permissionId);
 
     /**
      * Xử lý nghiệp vụ đăng ký người dùng mới.

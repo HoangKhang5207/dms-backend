@@ -115,18 +115,14 @@ public class SecurityConfig {
 
     // Bean mới để chuyển đổi claims trong JWT thành Roles
     private JwtAuthenticationConverter jwtAuthenticationConverter() {
-        JwtAuthenticationConverter converter = new JwtAuthenticationConverter();
-        converter.setJwtGrantedAuthoritiesConverter(jwt -> {
-            // Lấy claim 'is_admin' từ User entity (cần được thêm vào khi tạo token)
-            boolean isAdmin = jwt.getClaimAsBoolean("is_admin");
-            List<GrantedAuthority> authorities = new ArrayList<>();
-            authorities.add(new SimpleGrantedAuthority("ROLE_USER")); // Mọi người đều là USER
-            if (isAdmin) {
-                authorities.add(new SimpleGrantedAuthority("ROLE_ADMIN"));
-            }
-            return authorities;
-        });
-        return converter;
+        JwtGrantedAuthoritiesConverter grantedAuthoritiesConverter = new JwtGrantedAuthoritiesConverter();
+        // Cấu hình để nó không đọc claim "scope" mặc định và thêm tiền tố "SCOPE_"
+        grantedAuthoritiesConverter.setAuthorityPrefix("");
+        grantedAuthoritiesConverter.setAuthoritiesClaimName("scope"); // Đọc từ claim "scope"
+
+        JwtAuthenticationConverter jwtAuthenticationConverter = new JwtAuthenticationConverter();
+        jwtAuthenticationConverter.setJwtGrantedAuthoritiesConverter(grantedAuthoritiesConverter);
+        return jwtAuthenticationConverter;
     }
 
     // @Bean

@@ -8,6 +8,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,17 +38,20 @@ public class DepartmentController {
     private final CategoryService categoryService;
 
     @PostMapping
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('department:create')")
     public ResponseEntity<DepartmentResponse> createDepartment(@Valid @RequestBody DepartmentCreateRequest createDto) {
         DepartmentResponse createdDept = departmentService.createDepartment(createDto);
         return new ResponseEntity<>(createdDept, HttpStatus.CREATED);
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('MEMBER') and hasAuthority('department:view-details')")
     public ResponseEntity<DepartmentResponse> getDepartmentById(@PathVariable Long id) {
         return ResponseEntity.ok(departmentService.getDepartmentById(id));
     }
 
     @GetMapping("/organization/{orgId}")
+    @PreAuthorize("@authService.isMemberOfOrg(#orgId)")
     public ResponseEntity<List<DepartmentResponse>> getAllDepartmentsByOrg(@PathVariable Long orgId) {
         return ResponseEntity.ok(departmentService.getAllDepartmentsByOrg(orgId));
     }

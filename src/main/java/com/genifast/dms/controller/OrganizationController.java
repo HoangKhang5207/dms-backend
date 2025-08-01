@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -25,6 +26,7 @@ public class OrganizationController {
     private final OrganizationService organizationService;
 
     @PostMapping
+    @PreAuthorize("hasRole('DEFAULT_USER') and hasAuthority('organization:create-request')")
     public ResponseEntity<OrganizationResponse> createOrganization(
             @Valid @RequestBody OrganizationCreateRequest createDto) {
 
@@ -33,11 +35,13 @@ public class OrganizationController {
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasRole('MEMBER') and hasAuthority('organization:view-details')")
     public ResponseEntity<OrganizationResponse> getOrganizationById(@PathVariable("id") Long orgId) {
         return ResponseEntity.ok(organizationService.getOrganizationById(orgId));
     }
 
     @PutMapping("/{id}")
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('organization:update')")
     public ResponseEntity<OrganizationResponse> updateOrganization(
             @PathVariable("id") Long orgId,
             @Valid @RequestBody OrganizationUpdateRequest updateDto) {
@@ -46,12 +50,14 @@ public class OrganizationController {
     }
 
     @GetMapping("/check-pending-request")
+    @PreAuthorize("hasRole('DEFAULT_USER')")
     public ResponseEntity<CheckOrgResponse> checkUserHasPendingRequest() {
         return ResponseEntity.ok(organizationService.checkUserHasPendingOrganizationRequest());
     }
 
     // Endpoint này thường dành cho role ADMIN
     @PatchMapping("/{id}/status")
+    @PreAuthorize("hasRole('SYSTEM_ADMIN') and hasAuthority('organization:update-status')")
     public ResponseEntity<OrganizationResponse> updateOrganizationStatus(
             @PathVariable("id") Long orgId,
             @Valid @RequestBody UpdateOrganizationStatusRequest statusDto) {
@@ -61,6 +67,7 @@ public class OrganizationController {
     }
 
     @PostMapping("/{id}/invite-members")
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('organization:invite-users')")
     public ResponseEntity<InviteUsersResponse> inviteUsers(
             @PathVariable("id") Long orgId,
             @Valid @RequestBody InviteUsersRequest inviteDto) {
@@ -69,6 +76,7 @@ public class OrganizationController {
     }
 
     @PostMapping("/{id}/remove-member")
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('organization:remove-user')")
     public ResponseEntity<String> removeUserFromOrganization(
             @PathVariable("id") Long orgId,
             @Valid @RequestBody UserActionRequest removeUserDto) {
@@ -78,6 +86,7 @@ public class OrganizationController {
     }
 
     @PostMapping("/{id}/assign-manager")
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('organization:assign-manager')")
     public ResponseEntity<String> assignManagerRole(
             @PathVariable("id") Long orgId,
             @Valid @RequestBody UserActionRequest assignDto) {
@@ -87,6 +96,7 @@ public class OrganizationController {
     }
 
     @PostMapping("/{id}/recall-manager")
+    @PreAuthorize("hasRole('ORGANIZATION_MANAGER') and hasAuthority('organization:recall-manager')")
     public ResponseEntity<String> recallManagerRole(
             @PathVariable("id") Long orgId,
             @Valid @RequestBody UserActionRequest recallDto) {
