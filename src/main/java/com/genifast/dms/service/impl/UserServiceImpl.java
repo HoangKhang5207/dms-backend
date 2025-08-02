@@ -92,13 +92,6 @@ public class UserServiceImpl implements UserService {
                         List<Role> foundRoles = roleRepository.findAllById(roleIds);
 
                         for (Role role : foundRoles) {
-                                if (role.getOrganization() == null &&
-                                                role.getName().equals("DEFAULT_USER")) {
-                                        // Role "DEFAULT_USER" có thể không thuộc tổ chức nào
-                                        newRoles.add(role);
-                                        continue;
-                                }
-
                                 // RÀNG BUỘC QUAN TRỌNG: Role phải thuộc cùng Organization với User
                                 if (role.getOrganization() == null
                                                 || !role.getOrganization().getId()
@@ -171,15 +164,10 @@ public class UserServiceImpl implements UserService {
                 user.setIsOrganizationManager(false);
                 user.setIsDeptManager(false);
 
-                // 5. Gán Role "DEFAULT_USER" mặc định
-                Role defaultRole = roleRepository.findByNameAndOrganizationIdIsNull("DEFAULT_USER")
-                                .orElseThrow(() -> new RuntimeException("Error: Default USER role not found."));
-                user.setRoles(Set.of(defaultRole));
-
-                // 6. Lưu vào CSDL
+                // 5. Lưu vào CSDL
                 userRepository.save(user);
 
-                // 7. Gửi email xác thực (logic gửi mail sẽ được thêm vào sau)
+                // 6. Gửi email xác thực (logic gửi mail sẽ được thêm vào sau)
                 log.info("User {} registered successfully. Sending verification email.", user.getEmail());
                 emailService.sendVerifyEmailCreateAccount(user.getEmail(),
                                 new VerifyEmailInfo(applicationProperties.email().linkVerifyEmail()));

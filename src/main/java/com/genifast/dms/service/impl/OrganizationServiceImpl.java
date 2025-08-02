@@ -20,8 +20,6 @@ import com.genifast.dms.common.utils.JwtUtils;
 import com.genifast.dms.config.ApplicationProperties;
 import com.genifast.dms.entity.Department;
 import com.genifast.dms.entity.Organization;
-import com.genifast.dms.entity.Permission;
-import com.genifast.dms.entity.Role;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.mapper.OrganizationMapper;
 import com.genifast.dms.mapper.UserMapper;
@@ -29,17 +27,12 @@ import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
 import com.genifast.dms.repository.OrganizationRepository;
-import com.genifast.dms.repository.PermissionRepository;
-import com.genifast.dms.repository.RoleRepository;
 import com.genifast.dms.repository.UserRepository;
 import com.genifast.dms.service.OrganizationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.Arrays;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.data.domain.Page;
@@ -54,8 +47,6 @@ public class OrganizationServiceImpl implements OrganizationService {
 
     private final OrganizationRepository organizationRepository;
     private final UserRepository userRepository;
-    private final RoleRepository roleRepository;
-    private final PermissionRepository permissionRepository;
     private final DepartmentRepository departmentRepository;
     private final CategoryRepository categoryRepository;
     private final DocumentRepository documentRepository;
@@ -110,7 +101,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         Organization organization = findOrgById(orgId);
 
         // Kiểm tra quyền truy cập của user
-        // checkUserAccessToOrganization(currentUser, orgId);
+        checkUserAccessToOrganization(currentUser, orgId);
 
         return organizationMapper.toOrganizationResponse(organization);
     }
@@ -126,11 +117,11 @@ public class OrganizationServiceImpl implements OrganizationService {
                     ErrorMessage.ORGANIZATION_NOT_EXIST.getMessage());
         }
 
-        // checkUserAccessToOrganization(currentUser, orgId);
+        checkUserAccessToOrganization(currentUser, orgId);
 
         // [cite_start]// 1. Kiểm tra quyền: chỉ manager của tổ chức mới được sửa [cite:
         // 253]
-        // authorizeUserIsOrgManager(currentUser, orgId);
+        authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Kiểm tra tên mới có bị trùng với tổ chức khác không
         organizationRepository.findByName(updateDto.getName()).ifPresent(existingOrg -> {
@@ -154,7 +145,7 @@ public class OrganizationServiceImpl implements OrganizationService {
     public OrganizationResponse updateOrganizationStatus(Long orgId, UpdateOrganizationStatusRequest statusDto) {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
         // Chỉ Admin hệ thống mới có quyền thay đổi trạng thái tổ chức
-        // authorizeUserIsAdmin(currentUser);
+        authorizeUserIsAdmin(currentUser);
 
         Organization organization = findOrgById(orgId);
         int newStatus = statusDto.getStatus();
@@ -171,11 +162,10 @@ public class OrganizationServiceImpl implements OrganizationService {
                             ErrorMessage.USER_IN_ANOTHER_ORGANIZATION.getMessage());
                 }
 
-                // TẠO ROLE MẶC ĐỊNH CHO TỔ CHỨC MỚI
-                createDefaultRolesForOrganization(organization);
-
-                // Gán người tạo làm Manager
-                assignManagerRoleToCreator(creator, organization);
+                // Gán tổ chức cho người tạo và cho họ làm manager đầu tiên
+                creator.setOrganization(organization);
+                creator.setIsOrganizationManager(true);
+                userRepository.save(creator);
 
                 log.info("Organization ID {} has been APPROVED by Admin {}", orgId, currentUser.getEmail());
                 break;
@@ -221,7 +211,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         Organization organization = findOrgById(orgId);
 
         // 1. Chỉ manager mới có quyền mời
-        // authorizeUserIsOrgManager(currentUser, orgId);
+        authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Lấy danh sách email từ request
         List<String> requestedEmails = inviteDto.getUsers().stream()
@@ -278,12 +268,6 @@ public class OrganizationServiceImpl implements OrganizationService {
                     "Department does not belong to the specified organization.");
         }
 
-        // Gán role MEMBER cho user
-        Role memberRole = roleRepository.findByNameAndOrganizationId("MEMBER", orgId)
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "MEMBER role not found for this org."));
-
-        user.getRoles().add(memberRole);
-
         user.setOrganization(organization);
         user.setDepartment(department);
         userRepository.save(user);
@@ -303,7 +287,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         }
 
         // 1. Chỉ manager mới có quyền xóa thành viên
-        // authorizeUserIsOrgManager(currentUser, orgId);
+        authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Tìm thành viên cần xóa
         User userToRemove = findUserByEmail(removeUserDto.getEmail());
@@ -340,7 +324,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         }
 
         // 1. Chỉ manager mới có quyền gán quyền
-        // authorizeUserIsOrgManager(currentUser, orgId);
+        authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Tìm user cần gán quyền
         User userToAssign = findUserByEmail(assignDto.getEmail());
@@ -354,9 +338,6 @@ public class OrganizationServiceImpl implements OrganizationService {
         }
 
         // 3. Gán quyền và lưu
-        Set<Role> roles = getDefaultRolesForOrganization(organization);
-
-        userToAssign.getRoles().addAll(roles);
         userToAssign.setIsOrganizationManager(true);
         userRepository.save(userToAssign);
         log.info("Manager role assigned to user {} in organization ID {} by manager {}",
@@ -393,10 +374,6 @@ public class OrganizationServiceImpl implements OrganizationService {
         }
 
         // 4. Bãi nhiệm và lưu
-        managerToRecall.getRoles().removeIf(role -> "ORGANIZATION_MANAGER".equals(role.getName()));
-        if (!managerToRecall.getIsDeptManager())
-            managerToRecall.getRoles().removeIf(role -> "DEPARTMENT_MANAGER".equals(role.getName()));
-
         managerToRecall.setIsOrganizationManager(false);
         userRepository.save(managerToRecall);
         log.info("Manager role recalled from user {} in organization ID {} by creator {}",
@@ -408,7 +385,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
 
         // Authorize: User phải là thành viên của tổ chức
-        // checkUserAccessToOrganization(currentUser, orgId);
+        checkUserAccessToOrganization(currentUser, orgId);
 
         Page<User> userPage = userRepository.findByOrganizationId(orgId, pageable);
 
@@ -421,11 +398,11 @@ public class OrganizationServiceImpl implements OrganizationService {
         Department department = findDepartmentById(deptId);
 
         // Authorize: User phải là thành viên của tổ chức chứa phòng ban này
-        // checkUserAccessToOrganization(currentUser,
-        // department.getOrganization().getId());
+        checkUserAccessToOrganization(currentUser,
+                department.getOrganization().getId());
 
         // Cho phép cả Org Manager và Dept Manager xem thành viên
-        // authorizeUserIsOrgManagerOrDeptManager(currentUser);
+        authorizeUserIsOrgManagerOrDeptManager(currentUser);
 
         Page<User> userPage = userRepository.findByDepartmentId(deptId, pageable);
 
@@ -438,7 +415,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
 
         // 1. Authorize: Chỉ manager của tổ chức mới được quyền gán/bãi nhiệm
-        // authorizeUserIsOrgManager(currentUser, orgId);
+        authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Tìm user mục tiêu
         User targetUser = findUserByEmail(deptManagerUpdateRequest.getEmail());
@@ -455,17 +432,7 @@ public class OrganizationServiceImpl implements OrganizationService {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "Cannot change your own role.");
         }
 
-        // 4. Cập nhật vai trò
-        Role deptManagerRole = roleRepository.findByNameAndOrganizationId("DEPARTMENT_MANAGER", orgId)
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST,
-                        "DEPARTMENT_MANAGER role not found for this org."));
-
-        if (deptManagerUpdateRequest.getIsManager()) {
-            targetUser.getRoles().add(deptManagerRole);
-        } else {
-            targetUser.getRoles().remove(deptManagerRole);
-        }
-
+        // 4. Cập nhật quyền
         userRepository.updateUserDeptManagerRole(targetUser.getId(), deptManagerUpdateRequest.getIsManager());
 
         String action = deptManagerUpdateRequest.getIsManager() ? "assigned" : "recalled";
@@ -526,64 +493,5 @@ public class OrganizationServiceImpl implements OrganizationService {
         if (!isOrgManager && !isDeptManager) {
             throw new ApiException(ErrorCode.USER_NO_PERMISSION, "User must be an organization or department manager.");
         }
-    }
-
-    private void createDefaultRolesForOrganization(Organization org) {
-        // Role MEMBER
-        if (roleRepository.findByNameAndOrganizationId("MEMBER", org.getId()).isEmpty()) {
-            Set<Permission> memberPermissions = new HashSet<>(permissionRepository.findAllByNameIn(
-                    Arrays.asList("documents:read", "documents:create", "documents:update", "documents:comment",
-                            "documents:submit", "organization:view-details", "organization:view-members",
-                            "department:view-details", "department:view-list-by-org", "department:view-categories",
-                            "category:view-documents")));
-            Role memberRole = Role.builder().name("MEMBER").organization(org).permissions(memberPermissions).build();
-            roleRepository.save(memberRole);
-        }
-
-        // Role DEPARTMENT_MANAGER
-        if (roleRepository.findByNameAndOrganizationId("DEPARTMENT_MANAGER", org.getId()).isEmpty()) {
-            Set<Permission> deptManagerPermissions = new HashSet<>(permissionRepository.findAllByNameIn(
-                    Arrays.asList("documents:read", "documents:create", "documents:update", "documents:comment",
-                            "documents:submit", "department:create", "department:update", "department:view-details",
-                            "category:create", "category:update", "category:view-details", "category:update-status")));
-            Role deptManagerRole = Role.builder().name("DEPARTMENT_MANAGER").organization(org)
-                    .permissions(deptManagerPermissions).build();
-            roleRepository.save(deptManagerRole);
-        }
-
-        // Role ORGANIZATION_MANAGER
-        if (roleRepository.findByNameAndOrganizationId("ORGANIZATION_MANAGER", org.getId()).isEmpty()) {
-            Set<Permission> orgManagerPermissions = new HashSet<>(permissionRepository.findAllByNameIn(
-                    Arrays.asList("documents:read", "documents:create", "documents:update", "documents:delete",
-                            "documents:approve", "documents:reject", "organization:update", "organization:invite-users",
-                            "organization:remove-user", "organization:assign-manager", "organization:recall-manager",
-                            "department:update-status", "department:update-manager")));
-            Role orgManagerRole = Role.builder().name("ORGANIZATION_MANAGER").organization(org)
-                    .permissions(orgManagerPermissions).build();
-            roleRepository.save(orgManagerRole);
-        }
-    }
-
-    private void assignManagerRoleToCreator(User creator, Organization organization) {
-        Set<Role> defaultRoles = getDefaultRolesForOrganization(organization);
-
-        // Gán role cho người tạo
-        creator.getRoles().addAll(defaultRoles);
-        creator.setOrganization(organization);
-        creator.setIsOrganizationManager(true);
-        userRepository.save(creator);
-    }
-
-    private Set<Role> getDefaultRolesForOrganization(Organization organization) {
-        Role orgManagerRole = roleRepository.findByNameAndOrganizationId("ORGANIZATION_MANAGER", organization.getId())
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST,
-                        "ORGANIZATION_MANAGER role not found for this org."));
-        Role deptManagerRole = roleRepository.findByNameAndOrganizationId("DEPARTMENT_MANAGER", organization.getId())
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST,
-                        "DEPARTMENT_MANAGER role not found for this org."));
-        Role memberRole = roleRepository.findByNameAndOrganizationId("MEMBER", organization.getId())
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "MEMBER role not found for this org."));
-
-        return new HashSet<>(Arrays.asList(orgManagerRole, deptManagerRole, memberRole));
     }
 }

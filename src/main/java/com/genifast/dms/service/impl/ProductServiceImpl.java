@@ -4,7 +4,6 @@ import java.util.List;
 
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -30,7 +29,6 @@ public class ProductServiceImpl implements ProductService {
     private final ProductMapper productMapper;
 
     @Override
-    @PreAuthorize("hasRole('ADMIN')") // << PHÂN QUYỀN
     @Transactional
     public ProductResponse createProduct(ProductCreateUpdateRequest createDto) {
         Product product = productMapper.toProduct(createDto);
@@ -59,7 +57,6 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    @PreAuthorize("hasRole('ADMIN')") // << PHÂN QUYỀN
     @Transactional
     public ProductResponse updateProduct(Long productId, ProductCreateUpdateRequest updateDto) {
         Product existingProduct = productRepository.findById(productId)
@@ -74,7 +71,6 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    @PreAuthorize("hasRole('ADMIN')") // << PHÂN QUYỀN
     @Transactional
     public void deleteProduct(Long productId) {
         if (!productRepository.existsById(productId)) {

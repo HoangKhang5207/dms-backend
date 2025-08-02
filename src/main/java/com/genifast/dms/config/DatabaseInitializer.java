@@ -92,24 +92,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 "documents:share:forwardable", "documents:share:timebound", "documents:share:external",
                 "documents:share:orgscope", "documents:submit", "documents:distribute", "documents:publish",
                 "documents:track", "documents:version:read", "documents:notify", "documents:report",
-                "documents:export", "documents:forward", "delegate_process", "audit:log",
-                // Thêm các quyền quản trị
-                "organization:update-status", "organization:view-list", "user:manage", "role:manage",
-
-                // Các quyền cho DEFAULT_USER
-                "user:view-profile", "user:update-profile", "user:change-password",
-                "organization:create-request",
-
-                // Các quyền cho ORGANIZATION_MANAGER, DEPARTMENT_MANAGER, MEMBER
-                "organization:view-details", "organization:update", "organization:invite-users",
-                "organization:remove-user", "organization:assign-manager", "organization:recall-manager",
-                "organization:view-members",
-                "department:create", "department:update", "department:view-details",
-                "department:view-list-by-org", "department:update-status", "department:update-manager",
-                "department:view-members",
-                "department:view-categories",
-                "category:create", "category:update", "category:view-details", "category:update-status",
-                "category:view-documents");
+                "documents:export", "documents:forward", "delegate_process", "audit:log");
 
         Map<String, Permission> existingPermissions = permissionRepository.findAll().stream()
                 .collect(Collectors.toMap(Permission::getName, Function.identity()));
@@ -140,29 +123,6 @@ public class DatabaseInitializer implements CommandLineRunner {
             roleRepository.save(adminRole);
             log.info(">>> Created SYSTEM_ADMIN role <<<");
         }
-
-        // --- ROLE: DEFAULT_USER (cho người dùng mới đăng ký) ---
-        if (roleRepository.findByNameAndOrganizationIdIsNull("DEFAULT_USER").isEmpty()) {
-            Set<Permission> defaultPermissions = Set.of(
-                    permissions.get("user:view-profile"),
-                    permissions.get("user:update-profile"),
-                    permissions.get("user:change-password"),
-                    permissions.get("organization:create-request"));
-            Role defaultRole = Role.builder()
-                    .name("DEFAULT_USER")
-                    .description("Default role for newly registered users before joining an organization")
-                    .isInheritable(false)
-                    .organization(null)
-                    .permissions(defaultPermissions)
-                    .build();
-            roleRepository.save(defaultRole);
-            log.info(">>> Created DEFAULT_USER role <<<");
-        }
-
-        // Các role thuộc về organization (như ORGANIZATION_MANAGER) sẽ được tạo khi tạo
-        // Organization
-        // Hoặc có thể tạo sẵn mẫu ở đây với organization_id = null để clone sau.
-        // Tạm thời chúng ta sẽ tạo khi cần.
     }
 
 }
