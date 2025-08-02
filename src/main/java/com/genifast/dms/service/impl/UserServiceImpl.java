@@ -84,7 +84,7 @@ public class UserServiceImpl implements UserService {
 
                 if (user.getOrganization() == null) {
                         throw new ApiException(ErrorCode.USER_NOT_IN_ORGANIZATION,
-                                        "User must belong to an organization to have roles assigned.");
+                                        "Người dùng phải thuộc một tổ chức để được chỉ định vai trò.");
                 }
 
                 Set<Role> newRoles = new HashSet<>();
@@ -92,13 +92,20 @@ public class UserServiceImpl implements UserService {
                         List<Role> foundRoles = roleRepository.findAllById(roleIds);
 
                         for (Role role : foundRoles) {
+                                if (role.getOrganization() == null &&
+                                                role.getName().equals("DEFAULT_USER")) {
+                                        // Role "DEFAULT_USER" có thể không thuộc tổ chức nào
+                                        newRoles.add(role);
+                                        continue;
+                                }
+
                                 // RÀNG BUỘC QUAN TRỌNG: Role phải thuộc cùng Organization với User
                                 if (role.getOrganization() == null
                                                 || !role.getOrganization().getId()
                                                                 .equals(user.getOrganization().getId())) {
                                         throw new ApiException(ErrorCode.INVALID_REQUEST,
-                                                        "Role " + role.getName()
-                                                                        + " does not belong to the user's organization.");
+                                                        "Vai trò " + role.getName()
+                                                                        + " không thuộc cùng tổ chức của người dùng.");
                                 }
                                 newRoles.add(role);
                         }
@@ -119,7 +126,7 @@ public class UserServiceImpl implements UserService {
 
                 Permission permission = permissionRepository.findById(permissionId)
                                 .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST,
-                                                "Permission not found."));
+                                                "Quyền hạn không tồn tại."));
 
                 // Kiểm tra xem quyền đã được gán chưa để tránh trùng lặp
                 boolean alreadyExists = user.getUserPermissions().stream()

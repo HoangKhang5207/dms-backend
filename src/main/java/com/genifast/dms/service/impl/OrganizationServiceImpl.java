@@ -110,7 +110,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         Organization organization = findOrgById(orgId);
 
         // Kiểm tra quyền truy cập của user
-        checkUserAccessToOrganization(currentUser, orgId);
+        // checkUserAccessToOrganization(currentUser, orgId);
 
         return organizationMapper.toOrganizationResponse(organization);
     }
@@ -126,11 +126,11 @@ public class OrganizationServiceImpl implements OrganizationService {
                     ErrorMessage.ORGANIZATION_NOT_EXIST.getMessage());
         }
 
-        checkUserAccessToOrganization(currentUser, orgId);
+        // checkUserAccessToOrganization(currentUser, orgId);
 
         // [cite_start]// 1. Kiểm tra quyền: chỉ manager của tổ chức mới được sửa [cite:
         // 253]
-        authorizeUserIsOrgManager(currentUser, orgId);
+        // authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Kiểm tra tên mới có bị trùng với tổ chức khác không
         organizationRepository.findByName(updateDto.getName()).ifPresent(existingOrg -> {
@@ -154,7 +154,7 @@ public class OrganizationServiceImpl implements OrganizationService {
     public OrganizationResponse updateOrganizationStatus(Long orgId, UpdateOrganizationStatusRequest statusDto) {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
         // Chỉ Admin hệ thống mới có quyền thay đổi trạng thái tổ chức
-        authorizeUserIsAdmin(currentUser);
+        // authorizeUserIsAdmin(currentUser);
 
         Organization organization = findOrgById(orgId);
         int newStatus = statusDto.getStatus();
@@ -221,7 +221,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         Organization organization = findOrgById(orgId);
 
         // 1. Chỉ manager mới có quyền mời
-        authorizeUserIsOrgManager(currentUser, orgId);
+        // authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Lấy danh sách email từ request
         List<String> requestedEmails = inviteDto.getUsers().stream()
@@ -303,7 +303,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         }
 
         // 1. Chỉ manager mới có quyền xóa thành viên
-        authorizeUserIsOrgManager(currentUser, orgId);
+        // authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Tìm thành viên cần xóa
         User userToRemove = findUserByEmail(removeUserDto.getEmail());
@@ -340,7 +340,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         }
 
         // 1. Chỉ manager mới có quyền gán quyền
-        authorizeUserIsOrgManager(currentUser, orgId);
+        // authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Tìm user cần gán quyền
         User userToAssign = findUserByEmail(assignDto.getEmail());
@@ -408,7 +408,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
 
         // Authorize: User phải là thành viên của tổ chức
-        checkUserAccessToOrganization(currentUser, orgId);
+        // checkUserAccessToOrganization(currentUser, orgId);
 
         Page<User> userPage = userRepository.findByOrganizationId(orgId, pageable);
 
@@ -421,10 +421,11 @@ public class OrganizationServiceImpl implements OrganizationService {
         Department department = findDepartmentById(deptId);
 
         // Authorize: User phải là thành viên của tổ chức chứa phòng ban này
-        checkUserAccessToOrganization(currentUser, department.getOrganization().getId());
+        // checkUserAccessToOrganization(currentUser,
+        // department.getOrganization().getId());
 
         // Cho phép cả Org Manager và Dept Manager xem thành viên
-        authorizeUserIsOrgManagerOrDeptManager(currentUser);
+        // authorizeUserIsOrgManagerOrDeptManager(currentUser);
 
         Page<User> userPage = userRepository.findByDepartmentId(deptId, pageable);
 
@@ -437,7 +438,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
 
         // 1. Authorize: Chỉ manager của tổ chức mới được quyền gán/bãi nhiệm
-        authorizeUserIsOrgManager(currentUser, orgId);
+        // authorizeUserIsOrgManager(currentUser, orgId);
 
         // 2. Tìm user mục tiêu
         User targetUser = findUserByEmail(deptManagerUpdateRequest.getEmail());

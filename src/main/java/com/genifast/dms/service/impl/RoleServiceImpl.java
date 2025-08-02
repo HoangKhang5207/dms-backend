@@ -24,6 +24,7 @@ import org.springframework.util.CollectionUtils;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -36,24 +37,45 @@ public class RoleServiceImpl implements RoleService {
     private final OrganizationRepository organizationRepository;
     private final RoleMapper roleMapper;
 
+    /**
+     * Tạo mới một Role.
+     * Hỗ trợ tạo Role cho một Organization cụ thể (nếu organizationId được cung
+     * cấp)
+     * hoặc tạo Role cấp hệ thống (nếu organizationId là null).
+     */
     @Override
     @Transactional
     public RoleResponseDto createRole(RoleRequestDto roleDto) {
-        // 1. Kiểm tra Organization tồn tại
-        Organization org = organizationRepository.findById(roleDto.getOrganizationId())
-                .orElseThrow(() -> new ApiException(ErrorCode.ORGANIZATION_NOT_EXIST, "Organization not found."));
+        Organization organization = null;
 
-        // 2. Kiểm tra tên Role trùng lặp trong Organization
-        if (roleRepository.findByNameAndOrganizationId(roleDto.getName(), org.getId()).isPresent()) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST, "Role name already exists in this organization.");
+        // --- Logic xử lý Organization ---
+        if (roleDto.getOrganizationId() != null) {
+            // Trường hợp 1: Tạo Role cho một Organization
+            organization = organizationRepository.findById(roleDto.getOrganizationId())
+                    .orElseThrow(() -> new ApiException(ErrorCode.ORGANIZATION_NOT_EXIST,
+                            ErrorMessage.ORGANIZATION_NOT_EXIST.getMessage()));
+
+            // Kiểm tra tên Role trùng lặp trong Organization
+            if (roleRepository.findByNameAndOrganizationId(roleDto.getName(), organization.getId()).isPresent()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò đã tồn tại trong tổ chức này.");
+            }
+        } else {
+            // Trường hợp 2: Tạo Role cấp hệ thống
+            // Kiểm tra tên Role trùng lặp trong các role hệ thống
+            if (roleRepository.findByNameAndOrganizationIdIsNull(roleDto.getName()).isPresent()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò đã tồn tại trong hệ thống.");
+            }
         }
 
         Role role = roleMapper.toRole(roleDto);
-        role.setOrganization(org);
+        role.setOrganization(organization); // Gán organization (có thể là null)
 
-        // 3. Gán Permissions cho Role
+        // --- Logic gán Permissions ---
         if (!CollectionUtils.isEmpty(roleDto.getPermissionIds())) {
             List<Permission> permissions = permissionRepository.findAllById(roleDto.getPermissionIds());
+            if (permissions.size() != roleDto.getPermissionIds().size()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Một hoặc nhiều quyền không tồn tại.");
+            }
             role.setPermissions(new HashSet<>(permissions));
         }
 
@@ -61,22 +83,47 @@ public class RoleServiceImpl implements RoleService {
         return roleMapper.toRoleResponseDto(savedRole);
     }
 
+    /**
+     * Cập nhật một Role đã có.
+     * Đảm bảo kiểm tra tính duy nhất của tên Role trong phạm vi (hệ thống hoặc tổ
+     * chức).
+     * Không cho phép thay đổi Organization của một Role.
+     */
     @Override
     @Transactional
     public RoleResponseDto updateRole(Long roleId, RoleRequestDto roleDto) {
         Role existingRole = roleRepository.findById(roleId)
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Role not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò không tồn tại."));
 
-        // Cập nhật các thuộc tính cơ bản
-        existingRole.setName(roleDto.getName());
+        // --- Logic kiểm tra tên trùng lặp khi cập nhật ---
+        if (!existingRole.getName().equalsIgnoreCase(roleDto.getName())) {
+            Optional<Role> duplicateRole;
+            if (existingRole.getOrganization() != null) {
+                // Role thuộc về một Organization
+                duplicateRole = roleRepository.findByNameAndOrganizationId(roleDto.getName(),
+                        existingRole.getOrganization().getId());
+            } else {
+                // Role hệ thống
+                duplicateRole = roleRepository.findByNameAndOrganizationIdIsNull(roleDto.getName());
+            }
+
+            if (duplicateRole.isPresent()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Tên vai trò đã tồn tại.");
+            }
+            existingRole.setName(roleDto.getName());
+        }
+
         existingRole.setDescription(roleDto.getDescription());
 
-        // Cập nhật danh sách permissions
+        // --- Logic cập nhật Permissions ---
         if (roleDto.getPermissionIds() != null) {
             existingRole.getPermissions().clear(); // Xóa các quyền cũ
             if (!roleDto.getPermissionIds().isEmpty()) {
                 List<Permission> newPermissions = permissionRepository.findAllById(roleDto.getPermissionIds());
-                existingRole.setPermissions(new HashSet<>(newPermissions)); // Thêm các quyền mới
+                if (newPermissions.size() != roleDto.getPermissionIds().size()) {
+                    throw new ApiException(ErrorCode.INVALID_REQUEST, "Một hoặc nhiều quyền không tồn tại.");
+                }
+                existingRole.setPermissions(new HashSet<>(newPermissions)); // Gán các quyền mới
             }
         }
 
@@ -88,7 +135,7 @@ public class RoleServiceImpl implements RoleService {
     @Transactional
     public void deleteRole(Long roleId) {
         Role roleToDelete = roleRepository.findById(roleId)
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Role not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò không tồn tại."));
 
         // Bước 1: Tìm tất cả user đang có role này
         List<User> usersWithRole = userRepository.findByRoles_Id(roleId);
@@ -116,7 +163,7 @@ public class RoleServiceImpl implements RoleService {
     @Override
     public RoleResponseDto getRoleById(Long roleId) {
         Role role = roleRepository.findById(roleId)
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Role not found."));
+                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò không tồn tại."));
         return roleMapper.toRoleResponseDto(role);
     }
 }

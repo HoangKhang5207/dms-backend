@@ -99,7 +99,7 @@ public class GlobalExceptionHandler {
                                 .timestamp(LocalDateTime.now())
                                 .status(HttpStatus.FORBIDDEN.value())
                                 .error(HttpStatus.FORBIDDEN.getReasonPhrase())
-                                .message("You do not have permission to perform this action.")
+                                .message("Bạn không có quyền truy cập hay thực hiện hành động này.")
                                 .path(request.getRequestURI())
                                 .build();
                 return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);
