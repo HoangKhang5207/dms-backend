@@ -1,5 +1,6 @@
 package com.genifast.dms.config;
 
+import com.genifast.dms.entity.Delegation;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.repository.DelegationRepository;
 import com.genifast.dms.repository.UserRepository;
@@ -20,6 +21,9 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
     private final DelegationRepository delegationRepository;
     private final UserRepository userRepository;
 
+    // Sử dụng ThreadLocal để lưu thông tin người ủy quyền trong phạm vi một request
+    public static final ThreadLocal<User> DELEGATOR_HOLDER = new ThreadLocal<>();
+
     /**
      * Phương thức này được Spring Security gọi khi
      * dùng @PreAuthorize("hasPermission(...)")
@@ -31,6 +35,8 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
      */
     @Override
     public boolean hasPermission(Authentication authentication, Object targetDomainObject, Object permission) {
+        DELEGATOR_HOLDER.remove(); // Xóa thông tin cũ trước khi kiểm tra
+
         if ((authentication == null) || !(permission instanceof String)) {
             return false;
         }
@@ -60,11 +66,19 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
         Long documentId = getLongId(targetDomainObject);
 
         // Truy vấn CSDL để tìm một ủy quyền còn hiệu lực
-        return delegationRepository.findActiveDelegation(
+        Optional<Delegation> activeDelegationOpt = delegationRepository.findActiveDelegation(
                 userId,
                 documentId,
                 permission.toString(),
-                Instant.now()).isPresent();
+                Instant.now());
+
+        if (activeDelegationOpt.isPresent()) {
+            // Nếu có ủy quyền, lưu lại người đã ủy quyền và trả về true
+            DELEGATOR_HOLDER.set(activeDelegationOpt.get().getDelegator());
+            return true;
+        }
+
+        return false;
     }
 
     /**

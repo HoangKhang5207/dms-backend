@@ -4,8 +4,14 @@ import com.genifast.dms.common.dto.ErrorResponseDTO;
 import com.genifast.dms.common.exception.ApiException;
 import com.genifast.dms.common.exception.StorageException;
 import com.genifast.dms.common.exception.StorageFileNotFoundException;
+import com.genifast.dms.common.utils.JwtUtils;
+import com.genifast.dms.dto.request.AuditLogRequest;
+import com.genifast.dms.entity.User;
+import com.genifast.dms.repository.UserRepository;
+import com.genifast.dms.service.AuditLogService;
 
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
 import org.apache.catalina.connector.ClientAbortException;
@@ -22,10 +28,15 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 
 @RestControllerAdvice
+@RequiredArgsConstructor
 @Slf4j
 public class GlobalExceptionHandler {
+
+        private final AuditLogService auditLogService;
+        private final UserRepository userRepository;
 
         /**
          * Bắt và xử lý các lỗi nghiệp vụ tùy chỉnh (kế thừa từ ApiException).
@@ -95,6 +106,26 @@ public class GlobalExceptionHandler {
         })
         public ResponseEntity<ErrorResponseDTO> handleAuthorizationDeniedException(
                         Exception ex, HttpServletRequest request) {
+
+                // --- LOGIC GHI LOG THẤT BẠI ---
+                JwtUtils.getCurrentUserLogin().ifPresent(email -> {
+                        Optional<User> userOpt = userRepository.findByEmail(email);
+                        userOpt.ifPresent(user -> {
+                                String action = "ACCESS_DENIED";
+                                String details = String.format(
+                                                "Thất bại: User '%s' đã cố gắng truy cập vào tài nguyên không được phép tại đường dẫn '%s'. Lý do: %s",
+                                                email, request.getRequestURI(), ex.getMessage());
+
+                                AuditLogRequest logRequest = AuditLogRequest.builder()
+                                                .action(action)
+                                                .details(details)
+                                                .userId(user.getId()) // Chỉ lưu ID của user
+                                                .build();
+
+                                auditLogService.logAction(logRequest);
+                        });
+                });
+
                 ErrorResponseDTO errorResponse = ErrorResponseDTO.builder()
                                 .timestamp(LocalDateTime.now())
                                 .status(HttpStatus.FORBIDDEN.value())

@@ -16,6 +16,9 @@ public class AuditLogResponse {
     @JsonProperty("document_id")
     private Long documentId;
 
+    @JsonProperty("delegated_by")
+    private String delegatedByEmail; // Email của người đã ủy quyền
+
     private String action;
     private Instant timestamp;
     private String details;

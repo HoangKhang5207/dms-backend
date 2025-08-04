@@ -39,6 +39,10 @@ public class AuditLog {
     @JoinColumn(name = "doc_id")
     private Document document;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "delegated_by")
+    private User delegatedBy; // Người đã ủy quyền
+
     @Column(name = "action", nullable = false, length = 50)
     private String action;
 

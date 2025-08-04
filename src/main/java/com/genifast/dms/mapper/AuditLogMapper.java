@@ -10,5 +10,6 @@ import org.mapstruct.ReportingPolicy;
 public interface AuditLogMapper {
     @Mapping(source = "user.email", target = "userEmail")
     @Mapping(source = "document.id", target = "documentId")
+    @Mapping(source = "delegatedBy.email", target = "delegatedByEmail")
     AuditLogResponse toAuditLogResponse(AuditLog auditLog);
 }
