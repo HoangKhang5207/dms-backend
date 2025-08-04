@@ -4,12 +4,14 @@ import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.scheduling.annotation.EnableAsync;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 import com.genifast.dms.config.ApplicationProperties;
 
 @SpringBootApplication
 @EnableAsync
 @EnableConfigurationProperties(ApplicationProperties.class)
+@EnableScheduling
 public class DocumentManagementApplication {
 
 	public static void main(String[] args) {

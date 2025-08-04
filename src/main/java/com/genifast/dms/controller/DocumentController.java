@@ -28,10 +28,13 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.genifast.dms.dto.request.DocumentCommentRequest;
 import com.genifast.dms.dto.request.DocumentFilterRequest;
+import com.genifast.dms.dto.request.DocumentShareRequest;
 import com.genifast.dms.dto.request.DocumentUpdateRequest;
 import com.genifast.dms.dto.request.SearchAndOrNotRequest;
 import com.genifast.dms.dto.response.DocumentResponse;
+import com.genifast.dms.dto.response.DocumentVersionResponse;
 import com.genifast.dms.entity.Document;
 import com.genifast.dms.service.DocumentService;
 import com.genifast.dms.service.FileStorageService;
@@ -51,11 +54,12 @@ public class DocumentController {
 
     // @PostMapping(consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
     // public ResponseEntity<DocumentResponse> createDocument(
-    //         @RequestPart("metadata") String metadataJson,
-    //         @RequestPart("file") MultipartFile file) {
+    // @RequestPart("metadata") String metadataJson,
+    // @RequestPart("file") MultipartFile file) {
 
-    //     DocumentResponse createdDocument = documentService.createDocument(metadataJson, file);
-    //     return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
+    // DocumentResponse createdDocument =
+    // documentService.createDocument(metadataJson, file);
+    // return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
     // }
 
     @PostMapping(value = "/upload-multiple", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
@@ -73,7 +77,7 @@ public class DocumentController {
 
     // @GetMapping("/{id}/download")
     // public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
-    //     return documentService.downloadDocumentFile(id);
+    // return documentService.downloadDocumentFile(id);
     // }
 
     @GetMapping("/{fileId}/retrieve")
@@ -97,6 +101,12 @@ public class DocumentController {
     public ResponseEntity<DocumentResponse> updateDocumentMetadata(@PathVariable Long id,
             @Valid @RequestBody DocumentUpdateRequest updateDto) {
         return ResponseEntity.ok(documentService.updateDocumentMetadata(id, updateDto));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteDocument(@PathVariable("id") Long docId) {
+        documentService.deleteDocument(docId);
+        return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/filter")
@@ -175,7 +185,8 @@ public class DocumentController {
             Map<String, Object> response = Map.of("hasWatermark", hasWatermark, "foundWatermarks", foundWatermarks);
             return ResponseEntity.ok(response);
         } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(Map.of("hasWatermark", false, "foundWatermarks", new ArrayList<>()));
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(Map.of("hasWatermark", false, "foundWatermarks", new ArrayList<>()));
         }
     }
 
@@ -205,5 +216,121 @@ public class DocumentController {
     public ResponseEntity<Void> deleteMultipleFiles(@RequestBody List<String> fileIds) throws Exception {
         fileStorageService.deleteMultipleFilesByIds(fileIds);
         return ResponseEntity.noContent().build();
+    }
+
+    // Bổ sung các endpoint giả định cho DMS - các hành động quản lý tài liệu
+    @PostMapping("/{id}/approve")
+    public ResponseEntity<String> approveDocument(@PathVariable("id") Long docId) {
+        documentService.approveDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được phê duyệt thành công.");
+    }
+
+    @PostMapping("/{id}/reject")
+    public ResponseEntity<String> rejectDocument(@PathVariable("id") Long docId) {
+        documentService.rejectDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã bị từ chối.");
+    }
+
+    @PostMapping("/{id}/share")
+    public ResponseEntity<String> shareDocument(@PathVariable("id") Long docId,
+            @Valid @RequestBody DocumentShareRequest shareRequest) {
+        documentService.shareDocument(docId, shareRequest);
+        return ResponseEntity.ok("Tài liệu đã được chia sẻ thành công.");
+    }
+
+    @GetMapping("/{id}/track")
+    public ResponseEntity<String> trackDocument(@PathVariable("id") Long docId) {
+        documentService.trackDocumentHistory(docId);
+        // Trong thực tế, endpoint này sẽ gọi AuditLogController để lấy dữ liệu
+        return ResponseEntity.ok("Hành động theo dõi đã được ghi lại. Xem chi tiết trong Audit Logs.");
+    }
+
+    @PostMapping("/{id}/submit")
+    public ResponseEntity<String> submitDocument(@PathVariable("id") Long docId) {
+        documentService.submitDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được trình ký thành công.");
+    }
+
+    @PostMapping("/{id}/publish")
+    public ResponseEntity<String> publishDocument(@PathVariable("id") Long docId) {
+        documentService.publishDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được công khai thành công.");
+    }
+
+    @PostMapping("/{id}/archive")
+    public ResponseEntity<String> archiveDocument(@PathVariable("id") Long docId) {
+        documentService.archiveDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được lưu trữ thành công.");
+    }
+
+    @PostMapping("/{id}/sign")
+    public ResponseEntity<String> signDocument(@PathVariable("id") Long docId) {
+        documentService.signDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được ký thành công.");
+    }
+
+    @PostMapping("/{id}/lock")
+    public ResponseEntity<String> lockDocument(@PathVariable("id") Long docId) {
+        documentService.lockDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được khóa.");
+    }
+
+    @PostMapping("/{id}/unlock")
+    public ResponseEntity<String> unlockDocument(@PathVariable("id") Long docId) {
+        documentService.unlockDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được mở khóa.");
+    }
+
+    @PostMapping("/{id}/comments")
+    public ResponseEntity<String> addComment(@PathVariable("id") Long docId,
+            @Valid @RequestBody DocumentCommentRequest commentRequest) {
+        documentService.addComment(docId, commentRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body("Bình luận đã được thêm.");
+    }
+
+    @PostMapping("/{id}/restore")
+    public ResponseEntity<String> restoreDocument(@PathVariable("id") Long docId) {
+        documentService.restoreDocument(docId);
+        return ResponseEntity.ok("Tài liệu đã được khôi phục.");
+    }
+
+    @GetMapping("/{id}/versions")
+    public ResponseEntity<List<DocumentVersionResponse>> getDocumentVersions(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.getDocumentVersions(docId));
+    }
+
+    @GetMapping("/{id}/versions/{versionNumber}")
+    public ResponseEntity<DocumentVersionResponse> getSpecificDocumentVersion(@PathVariable("id") Long docId,
+            @PathVariable Integer versionNumber) {
+        return ResponseEntity.ok(documentService.getSpecificDocumentVersion(docId, versionNumber));
+    }
+
+    @PostMapping("/{id}/notify")
+    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long docId) {
+        documentService.notifyRecipients(docId);
+        return ResponseEntity.ok("Đã gửi thông báo tới những người liên quan.");
+    }
+
+    @GetMapping("/{id}/export")
+    public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long docId) {
+        return documentService.exportDocument(docId);
+    }
+
+    @PostMapping("/{id}/forward")
+    public ResponseEntity<String> forwardDocument(@PathVariable("id") Long docId, @RequestParam String recipientEmail) {
+        documentService.forwardDocument(docId, recipientEmail);
+        return ResponseEntity.ok("Tài liệu đã được chuyển tiếp thành công.");
+    }
+
+    @PostMapping("/{id}/distribute")
+    public ResponseEntity<String> distributeDocument(@PathVariable("id") Long docId, @RequestParam Long departmentId) {
+        documentService.distributeDocument(docId, departmentId);
+        return ResponseEntity.ok("Tài liệu đã được phân phối.");
+    }
+
+    @GetMapping("/report")
+    public ResponseEntity<Resource> generateReport(@RequestParam String reportType) {
+        // reportType có thể là 'monthly_summary', 'user_activity', etc.
+        return documentService.generateDocumentReport(reportType);
     }
 }

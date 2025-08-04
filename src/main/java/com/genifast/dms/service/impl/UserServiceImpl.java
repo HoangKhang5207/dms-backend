@@ -8,6 +8,7 @@ import com.genifast.dms.dto.response.LoginResponseDto;
 import com.genifast.dms.dto.response.UserResponse;
 import com.genifast.dms.dto.request.SignUpRequestDto;
 import com.genifast.dms.dto.request.SocialLoginRequestDto;
+import com.genifast.dms.aop.AuditLog;
 import com.genifast.dms.common.constant.ErrorCode;
 import com.genifast.dms.common.constant.ErrorMessage;
 import com.genifast.dms.common.dto.ResetPasswordInfo;
@@ -144,6 +145,7 @@ public class UserServiceImpl implements UserService {
 
         @Override
         @Transactional
+        @AuditLog(action = "USER_SIGNUP")
         public void signUp(SignUpRequestDto signUpRequestDto) {
                 // 1. Kiểm tra email đã tồn tại chưa
                 userRepository.findByEmail(signUpRequestDto.getEmail()).ifPresent(user -> {
@@ -175,6 +177,7 @@ public class UserServiceImpl implements UserService {
         }
 
         @Override
+        @AuditLog(action = "USER_LOGIN")
         public LoginResponseDto login(LoginRequestDto loginRequestDto) {
                 // 1. Tìm user theo email
                 User user = userRepository.findByEmail(loginRequestDto.getEmail())
