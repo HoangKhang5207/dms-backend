@@ -1,5 +1,6 @@
 package com.genifast.dms.controller;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -332,5 +333,14 @@ public class DocumentController {
     public ResponseEntity<Resource> generateReport(@RequestParam String reportType) {
         // reportType có thể là 'monthly_summary', 'user_activity', etc.
         return documentService.generateDocumentReport(reportType);
+    }
+
+    // Bổ sung cho Visitor - tạo liên kết chia sẻ công khai
+    @PostMapping("/{id}/share-public")
+    public ResponseEntity<String> createShareLink(@PathVariable("id") Long docId,
+            @RequestParam Instant expiryAt,
+            @RequestParam(defaultValue = "false") boolean allowDownload) {
+        String link = documentService.createShareLink(docId, expiryAt, allowDownload);
+        return ResponseEntity.ok(link);
     }
 }

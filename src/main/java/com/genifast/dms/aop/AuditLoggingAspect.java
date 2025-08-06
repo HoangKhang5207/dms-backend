@@ -158,7 +158,7 @@ public class AuditLoggingAspect {
                     return String.format("Chia sẻ tài liệu ID %s cho '%s'%s.%s", args[0], req.getRecipientEmail(),
                             shareDetails, delegationInfo);
                 }
-                return String.format("Chia sẻ tài liệu ID %s.%s", args[0], delegationInfo);
+                return String.format("Chia sẻ công khai cho tài liệu ID %s.%s", args[0], delegationInfo);
             case "TRACK_DOCUMENT":
                 return String.format("Theo dõi lịch sử của tài liệu ID %s.%s", args[0], delegationInfo);
             case "ARCHIVE_DOCUMENT":

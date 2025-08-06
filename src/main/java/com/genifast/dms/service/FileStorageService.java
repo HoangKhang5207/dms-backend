@@ -42,4 +42,7 @@ public interface FileStorageService {
     byte[] downloadMultipleFilesAsZip(List<Map<String, String>> fileDetails) throws Exception;
 
     boolean checkWatermark(String fileId) throws Exception;
+
+    // Bổ sung phương thức cho Visitor
+    byte[] retrieveFileForVisitor(Document document) throws Exception;
 }

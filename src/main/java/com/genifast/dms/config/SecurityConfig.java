@@ -91,7 +91,7 @@ public class SecurityConfig {
                 "/", "/api/v1/auth/login", "/api/v1/auth/refresh-token", "/api/v1/auth/signup",
                 "/storage/**", "/api/v1/auth/email/**", "/v3/api-docs/**", "/swagger-ui.html",
                 "/swagger-ui/**", "/api/v1/auth/reset-password/request", "/api/v1/invitation/**",
-                "/api/v1/search-history/**"
+                "/api/v1/search-history/**", "/api/public/**"
         };
 
         return http

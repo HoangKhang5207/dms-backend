@@ -13,7 +13,6 @@ import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.Optional;
 
 /**
  * Repository interface cho Document entity.
@@ -44,6 +43,8 @@ public interface DocumentRepository extends JpaRepository<Document, Long>, JpaSp
      * Lấy danh sách document theo department. Tương ứng GetDocumentsByDepartmentID.
      */
     List<Document> findByDepartmentId(Long departmentId);
+
+    Optional<Document> findByShareToken(String shareToken);
 
     /**
      * Cập nhật trạng thái cho tất cả document thuộc một organization.

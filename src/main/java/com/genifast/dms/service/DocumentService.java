@@ -1,5 +1,6 @@
 package com.genifast.dms.service;
 
+import java.time.Instant;
 import java.util.List;
 
 import org.springframework.core.io.Resource;
@@ -68,4 +69,6 @@ public interface DocumentService {
     void distributeDocument(Long docId, Long departmentId);
 
     ResponseEntity<Resource> generateDocumentReport(String reportType);
+
+    String createShareLink(Long docId, Instant expiryAt, boolean allowDownload);
 }

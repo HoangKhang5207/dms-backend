@@ -33,10 +33,12 @@ import java.nio.charset.StandardCharsets;
 @Service
 public class WatermarkService {
 
-    public InputStream addWatermark(InputStream pdfInputStream, String fileId) throws IOException {
+    public InputStream addWatermark(InputStream pdfInputStream, String watermarkText) throws IOException {
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         PdfReader reader = new PdfReader(pdfInputStream);
-        PdfStamper stamper = new PdfStamper(reader, outputStream);
+
+        // Bổ sung cho phần thêm watermark riêng cho Visitor
+        PdfStamper stamper = new PdfStamper(reader, outputStream, '\0', true);
 
         BaseFont bf = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.EMBEDDED);
         PdfGState gstate = new PdfGState();
@@ -54,7 +56,7 @@ public class WatermarkService {
             over.setGState(gstate);
             over.beginText();
             over.setFontAndSize(bf, 8); // Use a small font size
-            over.showTextAligned(Element.ALIGN_LEFT, fileId, x, y, 0);
+            over.showTextAligned(Element.ALIGN_LEFT, watermarkText, x, y, 0);
             over.endText();
             over.restoreState();
         }
@@ -64,7 +66,8 @@ public class WatermarkService {
         return new ByteArrayInputStream(outputStream.toByteArray());
     }
 
-    public InputStream addWatermarkToImage(InputStream imageInputStream, String fileId, String fileExtension) throws IOException {
+    public InputStream addWatermarkToImage(InputStream imageInputStream, String fileId, String fileExtension)
+            throws IOException {
         BufferedImage image = ImageIO.read(imageInputStream);
         if (image == null) {
             throw new IOException("Could not read image from InputStream.");
@@ -88,7 +91,8 @@ public class WatermarkService {
         // Rotate by 45 degrees
         g2d.rotate(Math.toRadians(45));
 
-        // Draw watermark once in the center (relative to the translated and rotated context)
+        // Draw watermark once in the center (relative to the translated and rotated
+        // context)
         g2d.drawString(fileId, -textWidth / 2, textHeight / 2);
 
         // Restore the original transform
@@ -107,7 +111,7 @@ public class WatermarkService {
 
     public InputStream addWatermarkToDocx(InputStream docxInputStream, String fileId) throws IOException {
         try (XWPFDocument document = new XWPFDocument(docxInputStream);
-             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
 
             // Create a new paragraph at the end of the document
             XWPFParagraph paragraph = document.createParagraph();
@@ -157,7 +161,8 @@ public class WatermarkService {
     }
 
     /**
-     * Extracts potential watermark IDs (UUIDs) from a PDF document by searching its raw content stream.
+     * Extracts potential watermark IDs (UUIDs) from a PDF document by searching its
+     * raw content stream.
      * This method looks for patterns that resemble UUIDs in the page content.
      *
      * @param pdfInputStream The InputStream of the PDF file.
@@ -169,7 +174,8 @@ public class WatermarkService {
         PdfReader reader = new PdfReader(pdfInputStream);
         try {
             // Regex to find UUIDs (e.g., xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx)
-            Pattern uuidPattern = Pattern.compile("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
+            Pattern uuidPattern = Pattern.compile(
+                    "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
 
             for (int i = 1; i <= reader.getNumberOfPages(); i++) {
                 byte[] pageContent = reader.getPageContent(i);
@@ -187,10 +193,11 @@ public class WatermarkService {
 
     /**
      * Removes a text-based watermark from a PDF file.
-     * This method operates by replacing occurrences of the watermark text in the page content stream with an empty string.
+     * This method operates by replacing occurrences of the watermark text in the
+     * page content stream with an empty string.
      *
      * @param pdfInputStream The InputStream of the watermarked PDF file.
-     * @param fileId  The file ID to remove.
+     * @param fileId         The file ID to remove.
      * @return An InputStream containing the PDF with the watermark removed.
      * @throws IOException if an error occurs during PDF processing.
      */
@@ -213,17 +220,18 @@ public class WatermarkService {
 
     /**
      * Removes a hidden (vanished) watermark from a DOCX file.
-     * This method iterates through the document, finds text runs that are marked as "vanish"
+     * This method iterates through the document, finds text runs that are marked as
+     * "vanish"
      * and contain the watermark text, and removes them.
      *
      * @param docxInputStream The InputStream of the watermarked DOCX file.
-     * @param fileId   The file ID to remove.
+     * @param fileId          The file ID to remove.
      * @return An InputStream containing the DOCX with the watermark removed.
      * @throws IOException if an error occurs during DOCX processing.
      */
     public InputStream removeDocxWatermark(InputStream docxInputStream, String fileId) throws IOException {
         try (XWPFDocument document = new XWPFDocument(docxInputStream);
-             ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
+                ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
 
             for (XWPFParagraph paragraph : document.getParagraphs()) {
                 // Iterate backwards to safely remove runs

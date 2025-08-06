@@ -21,6 +21,8 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.time.Instant;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -28,99 +30,116 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class DelegationServiceImpl implements DelegationService {
 
-    private final DelegationRepository delegationRepository;
-    private final UserRepository userRepository;
-    private final DocumentRepository documentRepository;
-    private final DelegationMapper delegationMapper;
-    private final CustomPermissionEvaluator permissionEvaluator;
+        private final DelegationRepository delegationRepository;
+        private final UserRepository userRepository;
+        private final DocumentRepository documentRepository;
+        private final DelegationMapper delegationMapper;
+        private final CustomPermissionEvaluator permissionEvaluator;
 
-    @Override
-    @Transactional
-    @PreAuthorize("hasAuthority('delegate_process')")
-    public DelegationResponse createDelegation(DelegationRequest req) {
-        User delegator = findUserByEmail(JwtUtils.getCurrentUserLogin()
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.INVALID_USER.getMessage())));
+        @Override
+        @Transactional
+        @PreAuthorize("hasAuthority('delegate_process')")
+        public DelegationResponse createDelegation(DelegationRequest req) {
+                User delegator = findUserByEmail(JwtUtils.getCurrentUserLogin()
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND,
+                                                ErrorMessage.INVALID_USER.getMessage())));
 
-        User delegatee = findUserById(req.getDelegateeId());
-        Document document = findDocById(req.getDocumentId());
+                User delegatee = findUserById(req.getDelegateeId());
+                Document document = findDocById(req.getDocumentId());
 
-        // --- VALIDATION LOGIC ---
-        if (delegator.getId().equals(delegatee.getId())) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST, "Không thể tự ủy quyền cho chính mình.");
+                // --- VALIDATION LOGIC ---
+                if (delegator.getId().equals(delegatee.getId())) {
+                        throw new ApiException(ErrorCode.INVALID_REQUEST, "Không thể tự ủy quyền cho chính mình.");
+                }
+
+                // Logic ABAC: Kiểm tra xem người ủy quyền có thực sự sở hữu quyền mà họ đang cố
+                // gắng ủy quyền hay không.
+                // Phần này sẽ được xử lý bởi Custom Permission Evaluator ở bước sau.
+                // Tạm thời, chúng ta giả định người có quyền 'delegate_process' có thể ủy
+                // quyền.
+                // THỰC HIỆN KIỂM TRA LOGIC ABAC ---
+                // Lấy thông tin xác thực của người dùng hiện tại (delegator)
+                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+
+                // Sử dụng PermissionEvaluator để kiểm tra xem delegator có quyền
+                // `req.getPermission()` trên tài liệu `req.getDocumentId()` hay không.
+                boolean delegatorHasPermission = permissionEvaluator.hasPermission(
+                                authentication,
+                                req.getDocumentId(),
+                                req.getPermission());
+
+                if (!delegatorHasPermission) {
+                        throw new ApiException(ErrorCode.USER_NO_PERMISSION,
+                                        "Không thể ủy quyền: bạn không sở hữu quyền '" + req.getPermission()
+                                                        + "' trên tài liệu này.");
+                }
+
+                if (req.getStartAt().isAfter(req.getExpiryAt())) {
+                        throw new ApiException(ErrorCode.INVALID_REQUEST,
+                                        "Thời gian bắt đầu không được sau thời gian kết thúc.");
+                }
+                if (req.getExpiryAt().isBefore(Instant.now())) {
+                        throw new ApiException(ErrorCode.INVALID_REQUEST,
+                                        "Thời gian hết hạn không được là một thời điểm trong quá khứ.");
+                }
+
+                Delegation delegation = Delegation.builder()
+                                .delegator(delegator)
+                                .delegatee(delegatee)
+                                .document(document)
+                                .permission(req.getPermission())
+                                .startAt(req.getStartAt())
+                                .expiryAt(req.getExpiryAt())
+                                .build();
+
+                Delegation savedDelegation = delegationRepository.save(delegation);
+                return delegationMapper.toDelegationResponse(savedDelegation);
         }
 
-        // Logic ABAC: Kiểm tra xem người ủy quyền có thực sự sở hữu quyền mà họ đang cố
-        // gắng ủy quyền hay không.
-        // Phần này sẽ được xử lý bởi Custom Permission Evaluator ở bước sau.
-        // Tạm thời, chúng ta giả định người có quyền 'delegate_process' có thể ủy
-        // quyền.
-        // THỰC HIỆN KIỂM TRA LOGIC ABAC ---
-        // Lấy thông tin xác thực của người dùng hiện tại (delegator)
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-
-        // Sử dụng PermissionEvaluator để kiểm tra xem delegator có quyền
-        // `req.getPermission()` trên tài liệu `req.getDocumentId()` hay không.
-        boolean delegatorHasPermission = permissionEvaluator.hasPermission(
-                authentication,
-                req.getDocumentId(),
-                req.getPermission());
-
-        if (!delegatorHasPermission) {
-            throw new ApiException(ErrorCode.USER_NO_PERMISSION,
-                    "Không thể ủy quyền: bạn không sở hữu quyền '" + req.getPermission() + "' trên tài liệu này.");
+        @Override
+        @PreAuthorize("hasAuthority('documents:read')") // Cần quyền đọc tài liệu để xem các ủy quyền
+        public List<DelegationResponse> getDelegationsByDocument(Long documentId) {
+                return delegationRepository.findByDocumentId(documentId).stream()
+                                .map(delegationMapper::toDelegationResponse)
+                                .collect(Collectors.toList());
         }
 
-        Delegation delegation = Delegation.builder()
-                .delegator(delegator)
-                .delegatee(delegatee)
-                .document(document)
-                .permission(req.getPermission())
-                .expiryAt(req.getExpiryAt())
-                .build();
+        @Override
+        @Transactional
+        public void revokeDelegation(Long delegationId) {
+                User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin()
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND,
+                                                ErrorMessage.INVALID_USER.getMessage())));
 
-        Delegation savedDelegation = delegationRepository.save(delegation);
-        return delegationMapper.toDelegationResponse(savedDelegation);
-    }
+                Delegation delegation = delegationRepository.findById(delegationId)
+                                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST,
+                                                "Ủy quyền không tồn tại."));
 
-    @Override
-    @PreAuthorize("hasAuthority('documents:read')") // Cần quyền đọc tài liệu để xem các ủy quyền
-    public List<DelegationResponse> getDelegationsByDocument(Long documentId) {
-        return delegationRepository.findByDocumentId(documentId).stream()
-                .map(delegationMapper::toDelegationResponse)
-                .collect(Collectors.toList());
-    }
+                // Chỉ người tạo ra ủy quyền (delegator) hoặc admin mới có quyền thu hồi
+                if (!delegation.getDelegator().getId().equals(currentUser.getId()) && !currentUser.getIsAdmin()) {
+                        throw new ApiException(ErrorCode.USER_NO_PERMISSION,
+                                        "Bạn không có quyền thu hồi ủy quyền này.");
+                }
 
-    @Override
-    @Transactional
-    public void revokeDelegation(Long delegationId) {
-        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin()
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.INVALID_USER.getMessage())));
-
-        Delegation delegation = delegationRepository.findById(delegationId)
-                .orElseThrow(() -> new ApiException(ErrorCode.INVALID_REQUEST, "Ủy quyền không tồn tại."));
-
-        // Chỉ người tạo ra ủy quyền (delegator) hoặc admin mới có quyền thu hồi
-        if (!delegation.getDelegator().getId().equals(currentUser.getId()) && !currentUser.getIsAdmin()) {
-            throw new ApiException(ErrorCode.USER_NO_PERMISSION, "Bạn không có quyền thu hồi ủy quyền này.");
+                delegationRepository.delete(delegation);
         }
 
-        delegationRepository.delete(delegation);
-    }
+        // --- Helper Methods ---
+        private User findUserByEmail(String email) {
+                return userRepository.findByEmail(email)
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND,
+                                                ErrorMessage.INVALID_USER.getMessage()));
+        }
 
-    // --- Helper Methods ---
-    private User findUserByEmail(String email) {
-        return userRepository.findByEmail(email)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.INVALID_USER.getMessage()));
-    }
+        private User findUserById(Long id) {
+                return userRepository.findById(id)
+                                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND,
+                                                "Người được ủy quyền không tồn tại."));
+        }
 
-    private User findUserById(Long id) {
-        return userRepository.findById(id)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, "Người được ủy quyền không tồn tại."));
-    }
-
-    private Document findDocById(Long docId) {
-        return documentRepository.findById(docId)
-                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND,
-                        ErrorMessage.DOCUMENT_NOT_FOUND.getMessage()));
-    }
+        private Document findDocById(Long docId) {
+                return documentRepository.findById(docId)
+                                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND,
+                                                ErrorMessage.DOCUMENT_NOT_FOUND.getMessage()));
+        }
 }

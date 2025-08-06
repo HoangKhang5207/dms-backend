@@ -94,6 +94,16 @@ public class Document {
     @Column(name = "photo_id", columnDefinition = "TEXT")
     private String photoId;
 
+    // --- BỔ SUNG CÁC TRƯỜNG MỚI CHO VISITOR ---
+    @Column(name = "share_token", length = 36, unique = true)
+    private String shareToken; // UUID để tạo link chia sẻ
+
+    @Column(name = "public_share_expiry_at")
+    private Instant publicShareExpiryAt; // Thời gian hết hạn của link
+
+    @Column(name = "allow_public_download")
+    private boolean allowPublicDownload = false; // Mặc định không cho phép tải
+
     @OneToMany(mappedBy = "document", fetch = FetchType.LAZY)
     @Builder.Default
     private Set<PrivateDoc> privateDocuments = new HashSet<>();

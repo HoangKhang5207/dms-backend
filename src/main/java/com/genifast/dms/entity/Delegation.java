@@ -31,6 +31,9 @@ public class Delegation {
     @Column(name = "permission", nullable = false, length = 50)
     private String permission; // Quyền được ủy quyền
 
+    @Column(name = "start_at") // Thời điểm bắt đầu hiệu lực
+    private Instant startAt;
+
     @Column(name = "expiry_at")
     private Instant expiryAt; // Thời điểm hết hạn. NULL nếu vô thời hạn.
 

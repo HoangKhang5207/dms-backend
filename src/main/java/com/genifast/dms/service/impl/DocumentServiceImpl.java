@@ -1,9 +1,12 @@
 package com.genifast.dms.service.impl;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -58,6 +61,9 @@ public class DocumentServiceImpl implements DocumentService {
     private final FileStorageService fileStorageService;
     private final DocumentMapper documentMapper;
     private final ObjectMapper objectMapper;
+
+    @Value("${shared.document.base-url}")
+    private String baseUrlForSharedDocuments;
 
     @Override
     @Transactional
@@ -216,7 +222,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:share:readonly') or hasPermission(#docId, 'document', 'documents:share:forwardable') or hasPermission(#docId, 'document', 'documents:share:timebound') or hasPermission(#docId, 'document', 'documents:share:external') or hasPermission(#docId, 'document', 'documents:share:orgscope')")
+    @PreAuthorize("hasPermission(#docId, 'document', 'documents:share:readonly') or hasPermission(#docId, 'document', 'documents:share:forwardable') or hasPermission(#docId, 'document', 'documents:share:timebound') or hasPermission(#docId, 'document', 'documents:share:orgscope')")
     @AuditLog(action = "SHARE_DOCUMENT")
     public void shareDocument(Long docId, DocumentShareRequest shareRequest) {
         log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng {}", docId, shareRequest.getRecipientEmail());
@@ -368,6 +374,30 @@ public class DocumentServiceImpl implements DocumentService {
         // (Excel, PDF)
         // Trả về file resource tương tự như download
         return ResponseEntity.ok().build(); // Giả định
+    }
+
+    @Override
+    @Transactional
+    @PreAuthorize("hasPermission(#docId, 'document', 'documents:share:external')")
+    @AuditLog(action = "SHARE_DOCUMENT")
+    public String createShareLink(Long docId, Instant expiryAt, boolean allowDownload) {
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        Document document = findDocById(docId);
+
+        // Người dùng phải có quyền truy cập vào tài liệu này mới được chia sẻ
+        authorizeUserCanAccessDocument(currentUser, document);
+
+        // Tạo token ngẫu nhiên
+        String token = UUID.randomUUID().toString();
+        document.setShareToken(token);
+        document.setPublicShareExpiryAt(expiryAt);
+        document.setAllowPublicDownload(allowDownload);
+
+        documentRepository.save(document);
+        log.info("User {} created a share link for document ID {}", currentUser.getEmail(), docId);
+
+        // Trả về URL đầy đủ để hiển thị cho người dùng
+        return baseUrlForSharedDocuments + token;
     }
 
     // ------ Helper Method ------

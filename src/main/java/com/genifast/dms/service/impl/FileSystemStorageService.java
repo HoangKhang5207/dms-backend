@@ -9,6 +9,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +38,9 @@ import com.genifast.dms.repository.UserRepository;
 import com.genifast.dms.service.FileStorageService;
 import com.genifast.dms.service.util.CryptoService;
 import com.genifast.dms.service.util.WatermarkService;
+import com.lowagie.text.pdf.PdfEncryptor;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.PdfWriter;
 import com.genifast.dms.common.utils.JwtUtils;
 
 import jakarta.annotation.PostConstruct;
@@ -54,7 +58,8 @@ public class FileSystemStorageService implements FileStorageService {
 
     public FileSystemStorageService(@Value("${storage.location}") String storageLocation, CryptoService cryptoService,
             DocumentRepository documentRepository, FileUploadRepository fileUploadRepository,
-            UserDocumentRepository userDocumentRepository, WatermarkService watermarkService, UserRepository userRepository) {
+            UserDocumentRepository userDocumentRepository, WatermarkService watermarkService,
+            UserRepository userRepository) {
         this.rootLocation = Paths.get(storageLocation);
         this.cryptoService = cryptoService;
         this.documentRepository = documentRepository;
@@ -463,5 +468,38 @@ public class FileSystemStorageService implements FileStorageService {
 
         // Check if any of the found watermarks match the expected fileId
         return foundWatermarks.contains(expectedWatermarkId);
+    }
+
+    // Tạo một phương thức mới dành riêng cho Visitor
+    @Override
+    public byte[] retrieveFileForVisitor(Document document) throws Exception {
+        // 1. Lấy file đã giải mã (giả sử link public không cần password)
+        byte[] decryptedContent = retrieveFileById(document.getFileId(), null, false); // Lấy file gốc, chưa có
+                                                                                       // watermark
+
+        String fileType = document.getType();
+        InputStream finalStream = new ByteArrayInputStream(decryptedContent);
+
+        // 2. Thêm Watermark dành riêng cho Visitor
+        String visitorWatermark = "Guest Access - " + Instant.now().toString();
+        if (fileType.equalsIgnoreCase("pdf")) {
+            finalStream = watermarkService.addWatermark(finalStream, visitorWatermark);
+        } else if (fileType.equalsIgnoreCase("docx")) {
+            // ... xử lý cho docx
+        }
+
+        byte[] watermarkedBytes = finalStream.readAllBytes();
+
+        // 3. Nếu là file PDF, áp dụng quyền hạn chế
+        if (fileType.equalsIgnoreCase("pdf")) {
+            ByteArrayOutputStream protectedOutputStream = new ByteArrayOutputStream();
+            PdfReader reader = new PdfReader(watermarkedBytes);
+            // Áp dụng quyền: chỉ cho phép xem, không cho in, không cho sửa, không cho copy
+            PdfEncryptor.encrypt(reader, protectedOutputStream, null, null,
+                    PdfWriter.ALLOW_SCREENREADERS, false);
+            return protectedOutputStream.toByteArray();
+        }
+
+        return watermarkedBytes;
     }
 }

@@ -22,6 +22,10 @@ public class DelegationRequest {
     @NotBlank(message = "Quyền ủy quyền không được để trống")
     private String permission;
 
+    @NotNull(message = "Thời gian bắt đầu là bắt buộc")
+    @JsonProperty("start_at")
+    private Instant startAt;
+
     @JsonProperty("expiry_at")
     private Instant expiryAt; // Thời gian hết hạn (có thể null)
 }
