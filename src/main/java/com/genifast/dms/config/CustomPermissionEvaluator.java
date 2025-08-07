@@ -108,14 +108,12 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
             return false;
         }
 
-        final String permissionString = permission.toString();
-
         // --- BƯỚC 1: KIỂM TRA QUYỀN CÓ SẴN TỪ ROLE (RBAC) ---
-        for (final GrantedAuthority authority : authentication.getAuthorities()) {
-            if (authority.getAuthority().equals(permissionString)) {
-                return true;
-            }
-        }
+        // for (final GrantedAuthority authority : authentication.getAuthorities()) {
+        // if (authority.getAuthority().equals(permissionString)) {
+        // return true;
+        // }
+        // }
 
         User currentUser = userRepository.findByEmail(authentication.getName()).orElse(null);
         if (currentUser == null) {
@@ -124,10 +122,11 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
 
         // --- BƯỚC 2: XỬ LÝ LOGIC PHÂN QUYỀN THEO NGỮ CẢNH CỦA ĐỐI TƯỢNG ---
 
+        final String permissionString = permission.toString();
         Long id = getLongId(targetId);
 
         if ("document".equalsIgnoreCase(targetType)) {
-            return hasDocumentPermission(currentUser, id, permissionString);
+            return hasDocumentPermission(currentUser, id, permissionString, authentication);
         }
 
         if ("project".equalsIgnoreCase(targetType)) {
@@ -137,45 +136,68 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
         return false;
     }
 
-    private boolean hasDocumentPermission(User user, Long documentId, String permission) {
+    private boolean hasDocumentPermission(User user, Long documentId, String permission,
+            Authentication authentication) {
         Document document = documentRepository.findById(documentId).orElse(null);
         if (document == null)
             return false;
 
-        // ƯU TIÊN 1: KIỂM TRA QUYỀN TRONG DỰ ÁN (NẾU CÓ)
+        // Ưu tiên 1: Quyền trong Dự án
         if (document.getProject() != null) {
-            Project project = document.getProject();
-
-            // ABAC check: Dự án có đang hoạt động không?
-            Instant now = Instant.now();
-            if (project.getStatus() != 1 || now.isBefore(project.getStartDate()) || now.isAfter(project.getEndDate())) {
-                return false; // Dự án không hoạt động
-            }
-
-            // RBAC check: Vai trò của user trong dự án có quyền này không?
-            boolean hasPermissionInProject = project.getMembers().stream()
-                    .filter(member -> member.getUser().getId().equals(user.getId()))
-                    .findFirst()
-                    .map(member -> member.getProjectRole().getPermissions().stream()
-                            .anyMatch(p -> p.getName().equals(permission)))
-                    .orElse(false);
-
-            if (hasPermissionInProject) {
-                return true; // Nếu có quyền trong dự án, cho phép ngay
-            }
+            boolean hasPermissionInProject = hasProjectPermission(user, document.getProject(), permission);
+            if (hasPermissionInProject)
+                return true;
         }
 
-        // ƯU TIÊN 2: KIỂM TRA QUYỀN ỦY QUYỀN (DELEGATION)
+        // Ưu tiên 2: Quyền qua Ủy quyền (Delegation)
         Optional<Delegation> delegation = delegationRepository.findActiveDelegation(user.getId(), documentId,
                 permission, Instant.now());
         if (delegation.isPresent()) {
             DELEGATOR_HOLDER.set(delegation.get().getDelegator());
-            return true;
+            // Người được ủy quyền vẫn phải tuân thủ các quy tắc ABAC của quyền đó
+        } else {
+            // Nếu không có ủy quyền, kiểm tra quyền RBAC gốc
+            boolean hasRBACPermission = authentication.getAuthorities().stream()
+                    .anyMatch(auth -> auth.getAuthority().equals(permission));
+            if (!hasRBACPermission) {
+                return false; // Không có quyền RBAC và không có ủy quyền -> Từ chối
+            }
         }
 
-        // ƯU TIÊN 3: KIỂM TRA QUYỀN TRUY CẬP CƠ BẢN (NẾU KHÔNG CÓ DỰ ÁN HOẶC KHÔNG CÓ
-        // QUYỀN TRONG DỰ ÁN)
-        // Logic này dành cho các quyền cơ bản như 'documents:read'
+        // Ưu tiên 3: Kiểm tra các điều kiện ABAC cho các quyền lai
+        switch (permission) {
+            case "documents:approve":
+            case "documents:reject":
+                // ABAC: Trạng thái tài liệu phải là PENDING (giả sử PENDING = 2)
+                return document.getStatus() == 2;
+
+            case "documents:submit":
+                // ABAC: Trạng thái tài liệu phải là DRAFT (giả sử DRAFT = 1)
+                return document.getStatus() == 1;
+
+            case "documents:export":
+                // ABAC: Trạng thái phải là APPROVED (giả sử = 3) VÀ user là manager của phòng
+                // ban đó
+                boolean isDeptManagerForExport = user.getIsDeptManager() != null && user.getIsDeptManager()
+                        && user.getDepartment().getId().equals(document.getDepartment().getId());
+                return document.getStatus() == 3 && isDeptManagerForExport;
+
+            case "documents:report":
+                // ABAC: User phải là quản lý của phòng ban/tổ chức chứa tài liệu
+                boolean isOrgManager = user.getIsOrganizationManager() != null && user.getIsOrganizationManager()
+                        && user.getOrganization().getId().equals(document.getOrganization().getId());
+                boolean isDeptManagerForReport = user.getIsDeptManager() != null && user.getIsDeptManager()
+                        && user.getDepartment().getId().equals(document.getDepartment().getId());
+                return isOrgManager || isDeptManagerForReport;
+
+            case "documents:notify":
+                // ABAC: User là Trưởng phòng của phòng ban chứa tài liệu
+                boolean isDeptManagerForNotify = user.getIsDeptManager() != null && user.getIsDeptManager()
+                        && user.getDepartment().getId().equals(document.getDepartment().getId());
+                return isDeptManagerForNotify;
+        }
+
+        // Ưu tiên 4: Quyền truy cập cơ bản (cho các quyền không có logic lai)
         if (permission.equals("documents:read")) {
             switch (document.getAccessType()) {
                 case 1:
@@ -191,26 +213,30 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
             }
         }
 
-        return false; // Mặc định từ chối
+        // Mặc định: Nếu đã vượt qua kiểm tra RBAC/Delegation và không có điều kiện ABAC
+        // đặc biệt nào, thì cho phép.
+        return true;
     }
 
-    private boolean hasProjectManagementPermission(User user, Long projectId, String permission) {
-        // Tương tự logic đã có, kiểm tra user có phải là thành viên dự án
-        // và vai trò của họ có quyền quản lý dự án không.
-        // Đây là nơi để kiểm tra các quyền như 'project:manage',
-        // 'project:member:manage'
-        Project project = documentRepository.findById(projectId).get().getProject(); // Lấy project từ document
-        if (project == null)
-            return false;
-
+    private boolean hasProjectPermission(User user, Project project, String permission) {
         Instant now = Instant.now();
-        if (now.isBefore(project.getStartDate()) || now.isAfter(project.getEndDate())) {
-            return false;
+        if (project.getStatus() != 1 || now.isBefore(project.getStartDate()) || now.isAfter(project.getEndDate())) {
+            return false; // ABAC: Dự án không hoạt động
         }
 
         return project.getMembers().stream()
                 .filter(member -> member.getUser().getId().equals(user.getId()))
-                .anyMatch(member -> member.getProjectRole().getPermissions().stream()
-                        .anyMatch(p -> p.getName().equals(permission)));
+                .findFirst() // ABAC: User phải là thành viên
+                .map(member -> member.getProjectRole().getPermissions().stream()
+                        .anyMatch(p -> p.getName().equals(permission))) // RBAC trong dự án
+                .orElse(false);
+    }
+
+    private boolean hasProjectManagementPermission(User user, Long projectId, String permission) {
+        Project project = documentRepository.findById(projectId).get().getProject();
+        if (project == null)
+            return false;
+
+        return hasProjectPermission(user, project, permission);
     }
 }

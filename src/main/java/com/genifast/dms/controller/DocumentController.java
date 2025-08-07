@@ -76,10 +76,10 @@ public class DocumentController {
         return ResponseEntity.ok(documentService.getDocumentMetadata(id));
     }
 
-    // @GetMapping("/{id}/download")
-    // public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
-    // return documentService.downloadDocumentFile(id);
-    // }
+    @GetMapping("/{id}/download")
+    public ResponseEntity<Resource> downloadFile(@PathVariable Long id) {
+        return documentService.downloadDocumentFile(id);
+    }
 
     @GetMapping("/{fileId}/retrieve")
     public ResponseEntity<ByteArrayResource> retrieveFile(
@@ -219,17 +219,17 @@ public class DocumentController {
         return ResponseEntity.noContent().build();
     }
 
-    // Bổ sung các endpoint giả định cho DMS - các hành động quản lý tài liệu
+    // ==========Bổ sung các endpoint giả định cho DMS - các hành động quản lý tài
+    // liệu==========
     @PostMapping("/{id}/approve")
-    public ResponseEntity<String> approveDocument(@PathVariable("id") Long docId) {
-        documentService.approveDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được phê duyệt thành công.");
+    public ResponseEntity<DocumentResponse> approveDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.approveDocument(docId));
     }
 
     @PostMapping("/{id}/reject")
-    public ResponseEntity<String> rejectDocument(@PathVariable("id") Long docId) {
-        documentService.rejectDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã bị từ chối.");
+    public ResponseEntity<DocumentResponse> rejectDocument(@PathVariable("id") Long docId,
+            @RequestParam String reason) {
+        return ResponseEntity.ok(documentService.rejectDocument(docId, reason));
     }
 
     @PostMapping("/{id}/share")
@@ -247,9 +247,8 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/submit")
-    public ResponseEntity<String> submitDocument(@PathVariable("id") Long docId) {
-        documentService.submitDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được trình ký thành công.");
+    public ResponseEntity<DocumentResponse> submitDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.submitDocument(docId));
     }
 
     @PostMapping("/{id}/publish")
@@ -307,14 +306,15 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/notify")
-    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long docId) {
-        documentService.notifyRecipients(docId);
+    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long docId, @RequestBody String message) {
+        documentService.notifyRecipients(docId, message);
         return ResponseEntity.ok("Đã gửi thông báo tới những người liên quan.");
     }
 
     @GetMapping("/{id}/export")
-    public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long docId) {
-        return documentService.exportDocument(docId);
+    public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long docId,
+            @RequestParam(defaultValue = "txt") String format) {
+        return documentService.exportDocument(docId, format);
     }
 
     @PostMapping("/{id}/forward")
@@ -324,15 +324,15 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/distribute")
-    public ResponseEntity<String> distributeDocument(@PathVariable("id") Long docId, @RequestParam Long departmentId) {
-        documentService.distributeDocument(docId, departmentId);
+    public ResponseEntity<String> distributeDocument(@PathVariable("id") Long docId,
+            @RequestBody List<Long> departmentIds) {
+        documentService.distributeDocument(docId, departmentIds);
         return ResponseEntity.ok("Tài liệu đã được phân phối.");
     }
 
     @GetMapping("/report")
-    public ResponseEntity<Resource> generateReport(@RequestParam String reportType) {
-        // reportType có thể là 'monthly_summary', 'user_activity', etc.
-        return documentService.generateDocumentReport(reportType);
+    public ResponseEntity<Resource> generateReport(@RequestParam String reportType, @RequestParam Long departmentId) {
+        return documentService.generateDocumentReport(reportType, departmentId);
     }
 
     // Bổ sung cho Visitor - tạo liên kết chia sẻ công khai

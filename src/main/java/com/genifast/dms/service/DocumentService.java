@@ -32,15 +32,15 @@ public interface DocumentService {
 
     Page<DocumentResponse> searchDocuments(SearchAndOrNotRequest searchDto, Pageable pageable);
 
-    void approveDocument(Long docId);
+    DocumentResponse approveDocument(Long docId);
 
-    void rejectDocument(Long docId);
+    DocumentResponse rejectDocument(Long docId, String reason); // Thêm lý do từ chối
 
     void shareDocument(Long docId, DocumentShareRequest shareRequest);
 
     void trackDocumentHistory(Long docId); // Để lấy lịch sử cho audit:log
 
-    void submitDocument(Long docId);
+    DocumentResponse submitDocument(Long docId);
 
     void publishDocument(Long docId);
 
@@ -60,15 +60,15 @@ public interface DocumentService {
 
     DocumentVersionResponse getSpecificDocumentVersion(Long docId, Integer versionNumber);
 
-    void notifyRecipients(Long docId);
+    void notifyRecipients(Long docId, String message); // Thêm message để gửi
 
-    ResponseEntity<Resource> exportDocument(Long docId);
+    ResponseEntity<Resource> exportDocument(Long docId, String format); // Thêm định dạng file export
 
     void forwardDocument(Long docId, String recipientEmail);
 
-    void distributeDocument(Long docId, Long departmentId);
+    void distributeDocument(Long docId, List<Long> departmentIds); // Phân phối tới nhiều phòng ban
 
-    ResponseEntity<Resource> generateDocumentReport(String reportType);
+    ResponseEntity<Resource> generateDocumentReport(String reportType, Long departmentId); // Báo cáo theo phòng ban
 
     String createShareLink(Long docId, Instant expiryAt, boolean allowDownload);
 }

@@ -7,6 +7,7 @@ import java.util.List;
 import java.util.UUID;
 
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,10 +37,12 @@ import com.genifast.dms.dto.request.SearchAndOrNotRequest;
 import com.genifast.dms.dto.response.DocumentResponse;
 import com.genifast.dms.dto.response.DocumentVersionResponse;
 import com.genifast.dms.entity.Category;
+import com.genifast.dms.entity.Department;
 import com.genifast.dms.entity.Document;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.mapper.DocumentMapper;
 import com.genifast.dms.repository.CategoryRepository;
+import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
 import com.genifast.dms.repository.PrivateDocumentRepository;
 import com.genifast.dms.repository.UserRepository;
@@ -56,6 +59,7 @@ import lombok.extern.slf4j.Slf4j;
 public class DocumentServiceImpl implements DocumentService {
     private final DocumentRepository documentRepository;
     private final UserRepository userRepository;
+    private final DepartmentRepository departmentRepository;
     private final CategoryRepository categoryRepository;
     private final PrivateDocumentRepository privateDocumentRepository;
     private final FileStorageService fileStorageService;
@@ -205,19 +209,29 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:approve')")
     @AuditLog(action = "APPROVE_DOCUMENT")
-    public void approveDocument(Long docId) {
-        log.info(" nghiệp vụ phê duyệt tài liệu ID: {}", docId);
-        // TODO: Implement chi tiết logic phê duyệt, thay đổi trạng thái tài liệu
+    public DocumentResponse approveDocument(Long docId) {
+        Document document = findDocById(docId);
+        // Giả sử: 2 = PENDING, 3 = APPROVED
+        document.setStatus(3);
+        Document approvedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been approved by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        // TODO: Gửi email thông báo cho người trình duyệt
+        return documentMapper.toDocumentResponse(approvedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:reject')")
     @AuditLog(action = "REJECT_DOCUMENT")
-    public void rejectDocument(Long docId) {
-        log.info(" nghiệp vụ từ chối tài liệu ID: {}", docId);
-        // TODO: Implement chi tiết logic từ chối, thay đổi trạng thái, có thể thêm lý
-        // do
+    public DocumentResponse rejectDocument(Long docId, String reason) {
+        Document document = findDocById(docId);
+        // Giả sử: 4 = REJECTED
+        document.setStatus(4);
+        Document rejectedDoc = documentRepository.save(document);
+        log.warn("Document ID {} was rejected by {} with reason: {}", docId, JwtUtils.getCurrentUserLogin().orElse(""),
+                reason);
+        // TODO: Gửi email thông báo từ chối kèm lý do
+        return documentMapper.toDocumentResponse(rejectedDoc);
     }
 
     @Override
@@ -242,9 +256,15 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:submit')")
     @AuditLog(action = "SUBMIT_DOCUMENT")
-    public void submitDocument(Long docId) {
-        log.info(" nghiệp vụ trình ký tài liệu ID: {}", docId);
-        // TODO: Implement chi tiết logic trình ký, thay đổi trạng thái sang "PENDING"
+    public DocumentResponse submitDocument(Long docId) {
+        Document document = findDocById(docId);
+        // Giả sử: 1 = DRAFT, 2 = PENDING
+        document.setStatus(2);
+        Document submittedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been submitted for approval by {}", docId,
+                JwtUtils.getCurrentUserLogin().orElse(""));
+        // TODO: Gửi email thông báo cho người có quyền duyệt
+        return documentMapper.toDocumentResponse(submittedDoc);
     }
 
     @Override
@@ -331,19 +351,37 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:notify')")
     @AuditLog(action = "NOTIFY_RECIPIENTS")
-    public void notifyRecipients(Long docId) {
-        log.info("Nghiệp vụ gửi thông báo cho người nhận của tài liệu ID: {}", docId);
-        // TODO: Lấy danh sách người nhận và gọi EmailService để gửi thông báo
+    public void notifyRecipients(Long docId, String message) {
+        Document document = findDocById(docId);
+        log.info("Sending notification for document ID: {} with message: '{}'", docId, message);
+        // TODO: Giả lập logic lấy danh sách người nhận (recipients) từ document
+        // và gọi EmailService để gửi thông báo cho từng người.
+        // List<User> recipients = getRecipientsFor(document);
+        // for(User recipient : recipients) {
+        // emailService.sendNotification(recipient.getEmail(), "Thông báo về tài liệu: "
+        // + document.getTitle(), message);
+        // }
     }
 
     @Override
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:export')")
     @AuditLog(action = "EXPORT_DOCUMENT")
-    public ResponseEntity<Resource> exportDocument(Long docId) {
-        log.info("Nghiệp vụ xuất/tải về tài liệu ID: {}", docId);
-        // Logic này tương tự download, nhưng có thể khác về định dạng (vd: export ra
-        // PDF)
-        return downloadDocumentFile(docId);
+    public ResponseEntity<Resource> exportDocument(Long docId, String format) {
+        log.info("Exporting document ID: {} to format: {}", docId, format);
+        // Logic này có thể rất phức tạp, ở đây ta giả lập việc export ra file text
+        Document document = findDocById(docId);
+        String content = "DOCUMENT EXPORT\n" +
+                "ID: " + document.getId() + "\n" +
+                "Title: " + document.getTitle() + "\n" +
+                "Description: " + document.getDescription();
+
+        Resource resource = new ByteArrayResource(content.getBytes());
+        String filename = "export-" + document.getId() + "." + format;
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.TEXT_PLAIN)
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(resource);
     }
 
     @Override
@@ -359,21 +397,47 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:distribute')")
     @AuditLog(action = "DISTRIBUTE_DOCUMENT")
-    public void distributeDocument(Long docId, Long departmentId) {
-        log.info("Nghiệp vụ phân phối tài liệu ID: {} đến phòng ban ID: {}", docId, departmentId);
-        // TODO: Implement logic tạo thông báo hoặc gán quyền truy cập cho tất cả thành
-        // viên của phòng ban
+    public void distributeDocument(Long docId, List<Long> departmentIds) {
+        log.info("Distributing document ID: {} to department IDs: {}", docId, departmentIds);
+        // TODO: Logic phân phối, có thể là tạo các bản ghi chia sẻ (PrivateDoc)
+        // cho tất cả thành viên của các phòng ban được chọn.
     }
 
     @Override
-    @PreAuthorize("hasAuthority('documents:report')")
+    @PreAuthorize("hasAuthority('documents:report')") // Chỉ user có quyền mới được vào
     @AuditLog(action = "GENERATE_DOCUMENT_REPORT")
-    public ResponseEntity<Resource> generateDocumentReport(String reportType) {
-        log.info("Nghiệp vụ tạo báo cáo thống kê tài liệu loại: {}", reportType);
-        // TODO: Implement logic truy vấn CSDL, tổng hợp dữ liệu và tạo file báo cáo
-        // (Excel, PDF)
-        // Trả về file resource tương tự như download
-        return ResponseEntity.ok().build(); // Giả định
+    public ResponseEntity<Resource> generateDocumentReport(String reportType, Long departmentId) {
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        Department department = departmentRepository.findById(departmentId).orElseThrow(
+                () -> new ApiException(ErrorCode.DEPARTMENT_NOT_FOUND, ErrorMessage.DEPARTMENT_NOT_FOUND.getMessage()));
+
+        // ABAC check: CustomPermissionEvaluator sẽ không chạy với endpoint không có
+        // {id},
+        // ta phải tự kiểm tra ở đây.
+        boolean isOrgManager = currentUser.getIsOrganizationManager() != null && currentUser.getIsOrganizationManager()
+                && currentUser.getOrganization().getId().equals(department.getOrganization().getId());
+        boolean isDeptManager = currentUser.getIsDeptManager() != null && currentUser.getIsDeptManager()
+                && currentUser.getDepartment().getId().equals(department.getId());
+        if (!isOrgManager && !isDeptManager) {
+            throw new ApiException(ErrorCode.USER_NO_PERMISSION, "Không có quyền tạo báo cáo cho phòng ban này.");
+        }
+
+        log.info("Generating report type '{}' for department ID: {}", reportType, departmentId);
+        // Giả lập logic tạo báo cáo
+        List<Document> documents = documentRepository.findByDepartmentId(departmentId);
+        StringBuilder csvContent = new StringBuilder("ID,Title,Status,CreatedBy,CreatedAt\n");
+        for (Document doc : documents) {
+            csvContent.append(String.format("%d,%s,%d,%s,%s\n",
+                    doc.getId(), doc.getTitle(), doc.getStatus(), doc.getCreatedBy(), doc.getCreatedAt().toString()));
+        }
+
+        Resource resource = new ByteArrayResource(csvContent.toString().getBytes());
+        String filename = "report-" + reportType + "-" + departmentId + ".csv";
+
+        return ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType("text/csv"))
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .body(resource);
     }
 
     @Override
