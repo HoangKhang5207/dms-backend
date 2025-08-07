@@ -94,6 +94,10 @@ public class Document {
     @Column(name = "photo_id", columnDefinition = "TEXT")
     private String photoId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "project_id") // Trường này có thể là NULL
+    private Project project;
+
     // --- BỔ SUNG CÁC TRƯỜNG MỚI CHO VISITOR ---
     @Column(name = "share_token", length = 36, unique = true)
     private String shareToken; // UUID để tạo link chia sẻ

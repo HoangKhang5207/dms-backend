@@ -63,23 +63,23 @@ public class DatabaseInitializer implements CommandLineRunner {
     }
 
     private void createAdminUser() {
-        if (userRepository.findByEmail("admin@gmail.com").isEmpty()) {
+        if (userRepository.findByEmail("quantri@genifast.edu.vn").isEmpty()) {
             User adminUser = new User();
-            adminUser.setEmail("admin@gmail.com");
+            adminUser.setEmail("quantri@genifast.edu.vn");
             adminUser.setPassword(this.passwordEncoder.encode("123456"));
-            adminUser.setFirstName("Admin");
-            adminUser.setLastName("System");
+            adminUser.setFirstName("H");
+            adminUser.setLastName("Lê Thị");
             adminUser.setGender(false);
             adminUser.setStatus(1); // Active
             adminUser.setIsAdmin(true); // Giữ lại flag này để tương thích
 
-            // Gán role SYSTEM_ADMIN
-            Role adminRole = roleRepository.findByNameAndOrganizationIdIsNull("SYSTEM_ADMIN")
-                    .orElseThrow(() -> new RuntimeException("SYSTEM_ADMIN role not found!"));
+            // Gán role Quản trị viên
+            Role adminRole = roleRepository.findByNameAndOrganizationIdIsNull("Quản trị viên")
+                    .orElseThrow(() -> new RuntimeException("vai trò Quản trị viên role không tồn tại!"));
             adminUser.setRoles(Set.of(adminRole));
 
             userRepository.save(adminUser);
-            log.info(">>> Created default admin user 'admin@gmail.com' <<<");
+            log.info(">>> Created default admin user 'quantri@genifast.edu.vn' <<<");
         }
     }
 
@@ -92,7 +92,14 @@ public class DatabaseInitializer implements CommandLineRunner {
                 "documents:share:forwardable", "documents:share:timebound", "documents:share:external",
                 "documents:share:orgscope", "documents:submit", "documents:distribute", "documents:publish",
                 "documents:track", "documents:version:read", "documents:notify", "documents:report",
-                "documents:export", "documents:forward", "delegate_process", "audit:log");
+                "documents:export", "documents:forward", "delegate_process", "audit:log",
+
+                // --- BỔ SUNG CÁC QUYỀN MỚI CHO DỰ ÁN ---
+                "project:read", // Quyền xem thông tin dự án
+                "project:manage", // Quyền quản lý chung (sửa, xóa dự án)
+                "project:member:manage", // Quyền quản lý thành viên (thêm, xóa, đổi vai trò)
+                "project:role:manage" // Quyền quản lý vai trò tùy chỉnh trong dự án
+        );
 
         Map<String, Permission> existingPermissions = permissionRepository.findAll().stream()
                 .collect(Collectors.toMap(Permission::getName, Function.identity()));
@@ -110,18 +117,18 @@ public class DatabaseInitializer implements CommandLineRunner {
     }
 
     private void createSystemRoles(Map<String, Permission> permissions) {
-        // --- ROLE: SYSTEM_ADMIN ---
-        if (roleRepository.findByNameAndOrganizationIdIsNull("SYSTEM_ADMIN").isEmpty()) {
+        // --- ROLE: Quản trị viên ---
+        if (roleRepository.findByNameAndOrganizationIdIsNull("Quản trị viên").isEmpty()) {
             Set<Permission> adminPermissions = new HashSet<>(permissions.values()); // Admin có tất cả quyền
             Role adminRole = Role.builder()
-                    .name("SYSTEM_ADMIN")
-                    .description("Super administrator with all permissions")
+                    .name("Quản trị viên")
+                    .description("Quản lý toàn hệ thống, có quyền xem và quản lý log.")
                     .isInheritable(false)
                     .organization(null) // Role hệ thống
                     .permissions(adminPermissions)
                     .build();
             roleRepository.save(adminRole);
-            log.info(">>> Created SYSTEM_ADMIN role <<<");
+            log.info(">>> Đã tạo vai trò Quản trị viên <<<");
         }
     }
 
