@@ -233,10 +233,10 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/share")
-    public ResponseEntity<String> shareDocument(@PathVariable("id") Long docId,
+    public ResponseEntity<Map<String, String>> shareDocument(@PathVariable("id") Long docId,
             @Valid @RequestBody DocumentShareRequest shareRequest) {
         documentService.shareDocument(docId, shareRequest);
-        return ResponseEntity.ok("Tài liệu đã được chia sẻ thành công.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được chia sẻ thành công."));
     }
 
     @GetMapping("/{id}/track")
@@ -252,33 +252,33 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/publish")
-    public ResponseEntity<String> publishDocument(@PathVariable("id") Long docId) {
+    public ResponseEntity<Map<String, String>> publishDocument(@PathVariable("id") Long docId) {
         documentService.publishDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được công khai thành công.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được công khai thành công."));
     }
 
     @PostMapping("/{id}/archive")
-    public ResponseEntity<String> archiveDocument(@PathVariable("id") Long docId) {
+    public ResponseEntity<Map<String, String>> archiveDocument(@PathVariable("id") Long docId) {
         documentService.archiveDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được lưu trữ thành công.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được lưu trữ thành công."));
     }
 
     @PostMapping("/{id}/sign")
-    public ResponseEntity<String> signDocument(@PathVariable("id") Long docId) {
+    public ResponseEntity<Map<String, String>> signDocument(@PathVariable("id") Long docId) {
         documentService.signDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được ký thành công.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được ký thành công."));
     }
 
     @PostMapping("/{id}/lock")
-    public ResponseEntity<String> lockDocument(@PathVariable("id") Long docId) {
+    public ResponseEntity<Map<String, String>> lockDocument(@PathVariable("id") Long docId) {
         documentService.lockDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được khóa.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được khóa."));
     }
 
     @PostMapping("/{id}/unlock")
-    public ResponseEntity<String> unlockDocument(@PathVariable("id") Long docId) {
+    public ResponseEntity<Map<String, String>> unlockDocument(@PathVariable("id") Long docId) {
         documentService.unlockDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được mở khóa.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được mở khóa."));
     }
 
     @PostMapping("/{id}/comments")
@@ -289,9 +289,9 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/restore")
-    public ResponseEntity<String> restoreDocument(@PathVariable("id") Long docId) {
+    public ResponseEntity<Map<String, String>> restoreDocument(@PathVariable("id") Long docId) {
         documentService.restoreDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được khôi phục.");
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được khôi phục."));
     }
 
     @GetMapping("/{id}/versions")
@@ -337,10 +337,10 @@ public class DocumentController {
 
     // Bổ sung cho Visitor - tạo liên kết chia sẻ công khai
     @PostMapping("/{id}/share-public")
-    public ResponseEntity<String> createShareLink(@PathVariable("id") Long docId,
+    public ResponseEntity<Map<String, String>> createShareLink(@PathVariable("id") Long docId,
             @RequestParam Instant expiryAt,
             @RequestParam(defaultValue = "false") boolean allowDownload) {
         String link = documentService.createShareLink(docId, expiryAt, allowDownload);
-        return ResponseEntity.ok(link);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("link", link));
     }
 }

@@ -153,7 +153,7 @@ public class AuditLoggingAspect {
                     String shareDetails = "";
                     if (req.getExpiryDate() != null)
                         shareDetails += " (có thời hạn)";
-                    if (req.getIsShareToExternal())
+                    if (req.getIsShareToExternal() != null && req.getIsShareToExternal())
                         shareDetails += " (ra ngoài tổ chức)";
                     return String.format("Chia sẻ tài liệu ID %s cho '%s'%s.%s", args[0], req.getRecipientEmail(),
                             shareDetails, delegationInfo);

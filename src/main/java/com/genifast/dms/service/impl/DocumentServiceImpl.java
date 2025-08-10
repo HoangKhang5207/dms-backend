@@ -50,6 +50,9 @@ import com.genifast.dms.repository.specifications.DocumentSpecification;
 import com.genifast.dms.service.DocumentService;
 import com.genifast.dms.service.FileStorageService;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -466,6 +469,16 @@ public class DocumentServiceImpl implements DocumentService {
 
     // ------ Helper Method ------
     private void authorizeUserCanAccessDocument(User user, Document document) {
+        // Lấy thông tin thiết bị từ request header
+        HttpServletRequest request = getCurrentRequest();
+        String deviceType = request != null ? request.getHeader("Device-Type") : "UNKNOWN";
+
+        // Quy tắc ABAC theo Device Type: Tài liệu PRIVATE hoặc LOCKED chỉ được truy cập từ thiết bị COMPANY_DEVICE
+        log.info("Checking access for document ID: {} with confidentiality: {} and device type: {}", document.getId(), document.getConfidentiality(), deviceType);
+        if ((document.getConfidentiality() == 4 || document.getConfidentiality() == 5) && !"COMPANY_DEVICE".equals(deviceType)) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Access denied from external device for private/locked document.");
+        }
+
         switch (document.getAccessType()) {
             case 1: // Public
                 return;
@@ -487,6 +500,14 @@ public class DocumentServiceImpl implements DocumentService {
                 break;
         }
         throw new ApiException(ErrorCode.USER_NO_PERMISSION, "User does not have permission to access this document.");
+    }
+
+    // Helper method to get current HttpServletRequest
+    private HttpServletRequest getCurrentRequest() {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes) {
+            return ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
+        }
+        return null;
     }
 
     private void authorizeUserCanEditDocument(User user, Document document) {

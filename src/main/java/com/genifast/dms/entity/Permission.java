@@ -29,6 +29,12 @@ public class Permission {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
+    @Column(name = "created_by", length = 50)
+    private String createdBy;
+
+    @Column(name = "updated_by", length = 50)
+    private String updatedBy;
+
     @ManyToMany(mappedBy = "permissions")
     private Set<Role> roles;
 

@@ -106,7 +106,26 @@ public class Document {
     private Instant publicShareExpiryAt; // Thời gian hết hạn của link
 
     @Column(name = "allow_public_download")
+    @Builder.Default
     private boolean allowPublicDownload = false; // Mặc định không cho phép tải
+
+    @Column(name = "confidentiality")
+    @Builder.Default
+    private Integer confidentiality = 2; // Default: INTERNAL
+
+    @Column(name = "recipients", columnDefinition = "TEXT")
+    private String recipients; // JSON array chứa danh sách user IDs
+
+    @Column(name = "version_number")
+    @Builder.Default
+    private Integer versionNumber = 1;
+
+    @Column(name = "signed_at")
+    private Instant signedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "signed_by")
+    private User signedBy;
 
     @OneToMany(mappedBy = "document", fetch = FetchType.LAZY)
     @Builder.Default
@@ -122,6 +141,27 @@ public class Document {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
+    }
+
+    // Helper methods for ABAC
+    public String getRecipients() {
+        return this.recipients;
+    }
+
+    public Integer getConfidentiality() {
+        return this.confidentiality;
+    }
+
+    public Long getOrganizationId() {
+        return this.organization != null ? this.organization.getId() : null;
+    }
+
+    public Long getDeptId() {
+        return this.department != null ? this.department.getId() : null;
+    }
+
+    public Long getProjectId() {
+        return this.project != null ? this.project.getId() : null;
     }
 
 }
