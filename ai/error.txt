@@ -1,5 +1,0 @@
-[ERROR] COMPILATION ERROR :
-[INFO] -------------------------------------------------------------
-[ERROR] /C:/Users/namdo/Downloads/dms/dms-backend/src/test/java/com/genifast/dms/service/abac/ABACServiceTest.java:[468,29] cannot find symbol
-  symbol:   method hasPublicDocAccess(long,long)
-  location: variable policyEvaluator of type com.genifast.dms.service.abac.PolicyEvaluator
