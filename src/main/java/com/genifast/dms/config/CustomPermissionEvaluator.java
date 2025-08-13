@@ -191,10 +191,15 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                 return isOrgManager || isDeptManagerForReport;
 
             case "documents:notify":
-                // ABAC: User là Trưởng phòng của phòng ban chứa tài liệu
-                boolean isDeptManagerForNotify = user.getIsDeptManager() != null && user.getIsDeptManager()
+                // ABAC: Ưu tiên Trưởng phòng; cho phép Quản lý tổ chức hoặc Admin trong cùng tổ chức
+                boolean isDeptManagerForNotify = Boolean.TRUE.equals(user.getIsDeptManager())
+                        && user.getDepartment() != null
                         && user.getDepartment().getId().equals(document.getDepartment().getId());
-                return isDeptManagerForNotify;
+                boolean isOrgManagerForNotify = Boolean.TRUE.equals(user.getIsOrganizationManager())
+                        && user.getOrganization() != null
+                        && user.getOrganization().getId().equals(document.getOrganization().getId());
+                boolean isAdmin = Boolean.TRUE.equals(user.getIsAdmin());
+                return isDeptManagerForNotify || isOrgManagerForNotify || isAdmin;
         }
 
         // Ưu tiên 4: Quyền truy cập cơ bản (cho các quyền không có logic lai)
