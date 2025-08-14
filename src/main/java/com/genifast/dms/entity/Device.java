@@ -15,8 +15,8 @@ import com.genifast.dms.entity.enums.DeviceType;
 @Builder
 public class Device {
     @Id
-    @Column(length = 50)
-    private String id;
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
 
     @Enumerated(EnumType.ORDINAL)
     @Column(name = "device_type", nullable = false)

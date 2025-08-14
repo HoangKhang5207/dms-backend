@@ -391,7 +391,6 @@ public class DatabaseInitializer implements CommandLineRunner {
         
         // Tạo devices test
         Device companyDevice = Device.builder()
-                .id("device-004")
                 .deviceName("Laptop Dell Inspiron 15")
                 .deviceType(DeviceType.COMPANY_DEVICE)
                 .user(userRepository.findByEmail("chuyenvien.dtao@genifast.edu.vn").orElse(null))
@@ -401,7 +400,6 @@ public class DatabaseInitializer implements CommandLineRunner {
         deviceRepository.save(companyDevice);
         
         Device externalDevice = Device.builder()
-                .id("device-005")
                 .deviceName("MacBook Pro M1")
                 .deviceType(DeviceType.EXTERNAL_DEVICE)
                 .user(userRepository.findByEmail("chuyenvien.dtao@genifast.edu.vn").orElse(null))

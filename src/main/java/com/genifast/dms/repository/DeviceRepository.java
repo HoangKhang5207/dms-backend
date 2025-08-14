@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Repository
-public interface DeviceRepository extends JpaRepository<Device, String> {
+public interface DeviceRepository extends JpaRepository<Device, Long> {
     
     /**
      * Tìm device theo user ID
@@ -48,7 +48,7 @@ public interface DeviceRepository extends JpaRepository<Device, String> {
      * Kiểm tra device có tồn tại và active không
      */
     @Query("SELECT COUNT(d) > 0 FROM Device d WHERE d.id = :deviceId AND d.status = 1")
-    boolean existsByIdAndActive(@Param("deviceId") String deviceId);
+    boolean existsByIdAndActive(@Param("deviceId") Long deviceId);
     
     /**
      * Tìm tất cả devices của một organization thông qua user
