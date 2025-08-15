@@ -175,6 +175,11 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                 // ABAC: Trạng thái tài liệu phải là DRAFT (giả sử DRAFT = 1)
                 return document.getStatus() == 1;
 
+            case "documents:distribute":
+            case "documents:forward":
+            case "documents:publish":
+                return document.getStatus() == 3; // APPROVED
+
             case "documents:export":
                 // ABAC: Trạng thái phải là APPROVED (giả sử = 3) VÀ user là manager của phòng
                 // ban đó

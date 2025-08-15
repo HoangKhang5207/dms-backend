@@ -42,19 +42,19 @@ public interface DocumentService {
 
     DocumentResponse submitDocument(Long docId);
 
-    void publishDocument(Long docId);
+    DocumentResponse publishDocument(Long docId);
 
-    void archiveDocument(Long docId);
+    DocumentResponse archiveDocument(Long docId);
 
-    void signDocument(Long docId);
+    DocumentResponse signDocument(Long docId);
 
-    void lockDocument(Long docId);
+    DocumentResponse lockDocument(Long docId);
 
-    void unlockDocument(Long docId);
+    DocumentResponse unlockDocument(Long docId);
 
     void addComment(Long docId, DocumentCommentRequest commentRequest);
 
-    void restoreDocument(Long docId);
+    DocumentResponse restoreDocument(Long docId);
 
     List<DocumentVersionResponse> getDocumentVersions(Long docId);
 

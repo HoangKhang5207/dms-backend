@@ -21,6 +21,9 @@ public class DelegationResponse {
 
     private String permission;
 
+    @JsonProperty("start_at")
+    private Instant startAt;
+
     @JsonProperty("expiry_at")
     private Instant expiryAt;
 

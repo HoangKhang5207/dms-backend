@@ -271,45 +271,67 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:publish')")
     @AuditLog(action = "PUBLISH_DOCUMENT")
-    public void publishDocument(Long docId) {
-        log.info(" nghiệp vụ công khai tài liệu ID: {}", docId);
-        // TODO: Implement chi tiết logic công khai, thay đổi accessType thành PUBLIC
+    public DocumentResponse publishDocument(Long docId) {
+        Document document = findDocById(docId);
+        document.setAccessType(1); // 1 = PUBLIC
+        document.setStatus(3); // Set status to APPROVED as well
+        Document publishedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been published by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(publishedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('documents:archive')")
     @AuditLog(action = "ARCHIVE_DOCUMENT")
-    public void archiveDocument(Long docId) {
-        log.info(" nghiệp vụ lưu trữ tài liệu ID: {}", docId);
-        // TODO: Implement chi tiết logic lưu trữ, thay đổi trạng thái
+    public DocumentResponse archiveDocument(Long docId) {
+        Document document = findDocById(docId);
+        document.setStatus(5); // 5 = ARCHIVED
+        Document archivedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been archived by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(archivedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:sign')")
     @AuditLog(action = "SIGN_DOCUMENT")
-    public void signDocument(Long docId) {
-        log.info("Nghiệp vụ ký điện tử tài liệu ID: {}", docId);
-        // TODO: Tích hợp với dịch vụ ký số (digital signature)
+    public DocumentResponse signDocument(Long docId) {
+        Document document = findDocById(docId);
+        // In a real scenario, this would integrate with a digital signature service.
+        // For now, we simulate by updating a field or status.
+        // Let's assume we add a "signed" flag or similar to the document entity if
+        // needed.
+        log.info("Document ID {} has been signed by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        // No status change needed unless specified by business logic
+        return documentMapper.toDocumentResponse(document);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:lock')")
     @AuditLog(action = "LOCK_DOCUMENT")
-    public void lockDocument(Long docId) {
-        log.info("Nghiệp vụ khóa tài liệu ID: {}", docId);
-        // TODO: Thay đổi trạng thái tài liệu để ngăn chặn chỉnh sửa
+    public DocumentResponse lockDocument(Long docId) {
+        Document document = findDocById(docId);
+        document.setStatus(6); // 6 = LOCKED
+        Document lockedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been locked by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(lockedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:unlock')")
     @AuditLog(action = "UNLOCK_DOCUMENT")
-    public void unlockDocument(Long docId) {
-        log.info("Nghiệp vụ mở khóa tài liệu ID: {}", docId);
-        // TODO: Thay đổi trạng thái tài liệu để cho phép chỉnh sửa lại
+    public DocumentResponse unlockDocument(Long docId) {
+        Document document = findDocById(docId);
+        // Return to APPROVED status after unlocking
+        if (document.getStatus() == 6) { // Only unlock if it's locked
+            document.setStatus(3); // 3 = APPROVED
+        }
+        Document unlockedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been unlocked by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(unlockedDoc);
     }
 
     @Override
@@ -325,9 +347,14 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasAuthority('documents:restore')")
     @AuditLog(action = "RESTORE_DOCUMENT")
-    public void restoreDocument(Long docId) {
-        log.info("Nghiệp vụ khôi phục tài liệu ID: {} từ trạng thái lưu trữ", docId);
-        // TODO: Thay đổi trạng thái tài liệu từ "ARCHIVED" về "ACTIVE"
+    public DocumentResponse restoreDocument(Long docId) {
+        Document document = findDocById(docId);
+        if (document.getStatus() == 5) { // Only restore if archived
+            document.setStatus(3); // Restore to APPROVED
+        }
+        Document restoredDoc = documentRepository.save(document);
+        log.info("Document ID {} has been restored by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(restoredDoc);
     }
 
     @Override

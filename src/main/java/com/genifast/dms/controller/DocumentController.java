@@ -53,23 +53,24 @@ public class DocumentController {
     private final FileStorageService fileStorageService;
     private final WatermarkService watermarkService;
 
-    // @PostMapping(consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
-    // public ResponseEntity<DocumentResponse> createDocument(
-    // @RequestPart("metadata") String metadataJson,
-    // @RequestPart("file") MultipartFile file) {
+    @PostMapping(consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+    public ResponseEntity<DocumentResponse> createDocument(
+            @RequestPart("metadata") String metadataJson,
+            @RequestPart("file") MultipartFile file) {
 
-    // DocumentResponse createdDocument =
-    // documentService.createDocument(metadataJson, file);
-    // return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
-    // }
-
-    @PostMapping(value = "/upload-multiple", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
-    public ResponseEntity<List<Document>> uploadMultipleFiles(
-            @RequestPart("files") MultipartFile[] files,
-            @RequestParam(required = false) String password) throws Exception {
-        List<Document> uploadedDocuments = fileStorageService.storeMultipleFiles(files, password);
-        return new ResponseEntity<>(uploadedDocuments, HttpStatus.CREATED);
+        DocumentResponse createdDocument = documentService.createDocument(metadataJson, file);
+        return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
     }
+
+    // @PostMapping(value = "/upload-multiple", consumes = {
+    // MediaType.MULTIPART_FORM_DATA_VALUE })
+    // public ResponseEntity<List<Document>> uploadMultipleFiles(
+    // @RequestPart("files") MultipartFile[] files,
+    // @RequestParam(required = false) String password) throws Exception {
+    // List<Document> uploadedDocuments =
+    // fileStorageService.storeMultipleFiles(files, password);
+    // return new ResponseEntity<>(uploadedDocuments, HttpStatus.CREATED);
+    // }
 
     @GetMapping("/{id}")
     public ResponseEntity<DocumentResponse> getDocumentMetadata(@PathVariable Long id) {
@@ -252,33 +253,28 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/publish")
-    public ResponseEntity<String> publishDocument(@PathVariable("id") Long docId) {
-        documentService.publishDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được công khai thành công.");
+    public ResponseEntity<DocumentResponse> publishDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.publishDocument(docId));
     }
 
     @PostMapping("/{id}/archive")
-    public ResponseEntity<String> archiveDocument(@PathVariable("id") Long docId) {
-        documentService.archiveDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được lưu trữ thành công.");
+    public ResponseEntity<DocumentResponse> archiveDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.archiveDocument(docId));
     }
 
     @PostMapping("/{id}/sign")
-    public ResponseEntity<String> signDocument(@PathVariable("id") Long docId) {
-        documentService.signDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được ký thành công.");
+    public ResponseEntity<DocumentResponse> signDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.signDocument(docId));
     }
 
     @PostMapping("/{id}/lock")
-    public ResponseEntity<String> lockDocument(@PathVariable("id") Long docId) {
-        documentService.lockDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được khóa.");
+    public ResponseEntity<DocumentResponse> lockDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.lockDocument(docId));
     }
 
     @PostMapping("/{id}/unlock")
-    public ResponseEntity<String> unlockDocument(@PathVariable("id") Long docId) {
-        documentService.unlockDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được mở khóa.");
+    public ResponseEntity<DocumentResponse> unlockDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.unlockDocument(docId));
     }
 
     @PostMapping("/{id}/comments")
@@ -289,9 +285,8 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/restore")
-    public ResponseEntity<String> restoreDocument(@PathVariable("id") Long docId) {
-        documentService.restoreDocument(docId);
-        return ResponseEntity.ok("Tài liệu đã được khôi phục.");
+    public ResponseEntity<DocumentResponse> restoreDocument(@PathVariable("id") Long docId) {
+        return ResponseEntity.ok(documentService.restoreDocument(docId));
     }
 
     @GetMapping("/{id}/versions")
@@ -306,14 +301,15 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/notify")
-    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long docId, @RequestBody String message) {
-        documentService.notifyRecipients(docId, message);
+    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long docId,
+            @RequestBody Map<String, String> payload) {
+        documentService.notifyRecipients(docId, payload.get("message"));
         return ResponseEntity.ok("Đã gửi thông báo tới những người liên quan.");
     }
 
     @GetMapping("/{id}/export")
     public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long docId,
-            @RequestParam(defaultValue = "txt") String format) {
+            @RequestParam(defaultValue = "pdf") String format) {
         return documentService.exportDocument(docId, format);
     }
 

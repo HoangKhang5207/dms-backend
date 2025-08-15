@@ -3,6 +3,9 @@ package com.genifast.dms.mapper;
 import com.genifast.dms.dto.response.ProjectMemberResponse;
 import com.genifast.dms.entity.ProjectMember;
 import com.genifast.dms.entity.User;
+
+import java.util.List;
+
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -17,6 +20,8 @@ public interface ProjectMemberMapper {
     @Mapping(source = "projectRole.id", target = "projectRoleId")
     @Mapping(source = "projectRole.name", target = "projectRoleName")
     ProjectMemberResponse toProjectMemberResponse(ProjectMember projectMember);
+
+    List<ProjectMemberResponse> toProjectMemberResponseList(List<ProjectMember> projectMembers);
 
     @Named("getFullName")
     default String getFullName(User user) {
