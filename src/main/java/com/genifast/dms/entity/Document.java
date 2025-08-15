@@ -88,7 +88,7 @@ public class Document {
     @Column(name = "title_unaccent", columnDefinition = "TEXT")
     private String titleUnaccent;
 
-    @Column(name = "password", length = 255)
+    @Column(name = "password", columnDefinition = "TEXT")
     private String password;
 
     @Column(name = "photo_id", columnDefinition = "TEXT")

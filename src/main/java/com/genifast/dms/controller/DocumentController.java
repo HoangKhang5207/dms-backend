@@ -66,8 +66,10 @@ public class DocumentController {
     @PostMapping(value = "/upload-multiple", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
     public ResponseEntity<List<Document>> uploadMultipleFiles(
             @RequestPart("files") MultipartFile[] files,
-            @RequestParam(required = false) String password) throws Exception {
-        List<Document> uploadedDocuments = fileStorageService.storeMultipleFiles(files, password);
+            @RequestParam(required = false) String password,
+            @RequestParam Long categoryId,
+            @RequestParam(required = false) Integer accessType) throws Exception {
+        List<Document> uploadedDocuments = fileStorageService.storeMultipleFiles(files, password, categoryId, accessType);
         return new ResponseEntity<>(uploadedDocuments, HttpStatus.CREATED);
     }
 
@@ -104,7 +106,7 @@ public class DocumentController {
         return ResponseEntity.ok(documentService.updateDocumentMetadata(id, updateDto));
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{id:\\d+}")
     public ResponseEntity<Void> deleteDocument(@PathVariable("id") Long docId) {
         documentService.deleteDocument(docId);
         return ResponseEntity.noContent().build();
@@ -149,12 +151,6 @@ public class DocumentController {
     public ResponseEntity<List<Document>> getAllDocuments() {
         List<Document> documents = fileStorageService.getAllDocuments();
         return ResponseEntity.ok(documents);
-    }
-
-    @DeleteMapping("/{fileId}")
-    public ResponseEntity<Void> deleteFile(@PathVariable String fileId) throws Exception {
-        fileStorageService.deleteFileById(fileId);
-        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/check-local-watermark")
@@ -214,8 +210,14 @@ public class DocumentController {
     }
 
     @DeleteMapping("/delete-multiple")
-    public ResponseEntity<Void> deleteMultipleFiles(@RequestBody List<String> fileIds) throws Exception {
-        fileStorageService.deleteMultipleFilesByIds(fileIds);
+    public ResponseEntity<Void> deleteMultipleFiles(@RequestBody List<Long> ids) {
+        if (ids != null) {
+            for (Long id : ids) {
+                if (id != null) {
+                    documentService.deleteDocument(id);
+                }
+            }
+        }
         return ResponseEntity.noContent().build();
     }
 

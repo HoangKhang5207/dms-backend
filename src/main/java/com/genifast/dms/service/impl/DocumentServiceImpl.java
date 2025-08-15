@@ -175,7 +175,30 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "DELETE_DOCUMENT")
     public void deleteDocument(Long docId) {
         log.info("Nghiệp vụ xóa tài liệu ID: {}", docId);
-        // TODO: Implement logic xóa mềm hoặc xóa cứng tài liệu và file vật lý
+        // 1) Tìm document theo ID (throw nếu không tồn tại)
+        Document document = findDocById(docId);
+
+        // 2) Xóa các bản ghi phân quyền riêng tư liên quan (nếu có)
+        try {
+            privateDocumentRepository.deleteByDocument(document);
+        } catch (Exception ex) {
+            log.warn("Không thể xóa PrivateDoc liên quan đến document ID {}: {}", docId, ex.getMessage());
+        }
+
+        // 3) Xóa file vật lý nếu có fileId
+        String fileId = document.getFileId();
+        if (fileId != null && !fileId.isEmpty()) {
+            try {
+                fileStorageService.deleteFileById(fileId);
+            } catch (Exception ex) {
+                // Không chặn việc xóa Document nếu xóa file vật lý thất bại
+                log.warn("Xóa file vật lý thất bại cho document ID {} (fileId={}): {}", docId, fileId, ex.getMessage());
+            }
+        }
+
+        // 4) Xóa bản ghi Document
+        documentRepository.delete(document);
+        log.info("Đã xóa document ID {} khỏi cơ sở dữ liệu", docId);
     }
 
     @Override

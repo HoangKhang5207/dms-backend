@@ -56,13 +56,13 @@ public class RoleServiceImpl implements RoleService {
                             ErrorMessage.ORGANIZATION_NOT_EXIST.getMessage()));
 
             // Kiểm tra tên Role trùng lặp trong Organization
-            if (roleRepository.findByNameAndOrganizationId(roleDto.getName(), organization.getId()).isPresent()) {
+            if (roleRepository.findByNameAndOrganization_Id(roleDto.getName(), organization.getId()).isPresent()) {
                 throw new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò đã tồn tại trong tổ chức này.");
             }
         } else {
             // Trường hợp 2: Tạo Role cấp hệ thống
             // Kiểm tra tên Role trùng lặp trong các role hệ thống
-            if (roleRepository.findByNameAndOrganizationIdIsNull(roleDto.getName()).isPresent()) {
+            if (roleRepository.findByNameAndOrganizationIsNull(roleDto.getName()).isPresent()) {
                 throw new ApiException(ErrorCode.INVALID_REQUEST, "Vai trò đã tồn tại trong hệ thống.");
             }
         }
@@ -100,11 +100,10 @@ public class RoleServiceImpl implements RoleService {
             Optional<Role> duplicateRole;
             if (existingRole.getOrganization() != null) {
                 // Role thuộc về một Organization
-                duplicateRole = roleRepository.findByNameAndOrganizationId(roleDto.getName(),
-                        existingRole.getOrganization().getId());
+                duplicateRole = roleRepository.findByNameAndOrganization_Id(roleDto.getName(), existingRole.getOrganization().getId());
             } else {
                 // Role hệ thống
-                duplicateRole = roleRepository.findByNameAndOrganizationIdIsNull(roleDto.getName());
+                duplicateRole = roleRepository.findByNameAndOrganizationIsNull(roleDto.getName());
             }
 
             if (duplicateRole.isPresent()) {
@@ -156,7 +155,7 @@ public class RoleServiceImpl implements RoleService {
         if (!organizationRepository.existsById(orgId)) {
             throw new ApiException(ErrorCode.ORGANIZATION_NOT_EXIST, ErrorMessage.ORGANIZATION_NOT_EXIST.getMessage());
         }
-        List<Role> roles = roleRepository.findByOrganizationId(orgId);
+        List<Role> roles = roleRepository.findByOrganization_Id(orgId);
         return roleMapper.toRoleResponseDtoList(roles);
     }
 

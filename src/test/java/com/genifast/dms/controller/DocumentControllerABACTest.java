@@ -113,6 +113,9 @@ class DocumentControllerABACTest {
     private PrivateDocumentRepository privateDocumentRepository;
 
     @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
+    @Autowired
     private ProjectMemberRepository projectMemberRepository;
 
     @PersistenceContext
@@ -160,6 +163,8 @@ class DocumentControllerABACTest {
         deviceRepository.deleteAll();
         privateDocumentRepository.deleteAll();
         documentRepository.deleteAll();
+        // Xóa refresh tokens trước để tránh vi phạm FK khi xóa users
+        refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
         categoryRepository.deleteAll();
         projectMemberRepository.deleteAll();
@@ -832,11 +837,18 @@ class DocumentControllerABACTest {
         MockMultipartFile mockFile = new MockMultipartFile(
             "files", "test.txt", MediaType.TEXT_PLAIN_VALUE, "hello".getBytes()
         );
-        when(fileStorageService.storeMultipleFiles(any(org.springframework.web.multipart.MultipartFile[].class), any()))
+        when(fileStorageService.storeMultipleFiles(
+                any(org.springframework.web.multipart.MultipartFile[].class),
+                any(),
+                any(),
+                any()))
             .thenReturn(java.util.Collections.emptyList());
 
         mockMvc.perform(multipart("/api/v1/documents/upload-multiple")
-                .file(mockFile))
+                .file(mockFile)
+                .param("categoryId", "1")
+                .param("accessType", "1")
+                .param("password", "secret"))
                 .andExpect(status().isCreated());
     }
 

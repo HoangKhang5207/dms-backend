@@ -60,7 +60,7 @@ public class AuditLogServiceImpl implements AuditLogService {
         }
     }
 
-    @Scheduled(fixedRate = 15000)
+    @Scheduled(fixedRate = 60000)
     @Transactional
     public void flushAuditLogs() {
         List<String> logsAsJson = listOps.range(AUDIT_LOG_QUEUE_KEY, -100, -1);

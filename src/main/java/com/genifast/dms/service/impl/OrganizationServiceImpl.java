@@ -387,7 +387,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         // Authorize: User phải là thành viên của tổ chức
         checkUserAccessToOrganization(currentUser, orgId);
 
-        Page<User> userPage = userRepository.findByOrganizationId(orgId, pageable);
+        Page<User> userPage = userRepository.findByOrganization_Id(orgId, pageable);
 
         return userPage.map(userMapper::toUserResponse);
     }
@@ -404,7 +404,7 @@ public class OrganizationServiceImpl implements OrganizationService {
         // Cho phép cả Org Manager và Dept Manager xem thành viên
         authorizeUserIsOrgManagerOrDeptManager(currentUser);
 
-        Page<User> userPage = userRepository.findByDepartmentId(deptId, pageable);
+        Page<User> userPage = userRepository.findByDepartment_Id(deptId, pageable);
 
         return userPage.map(userMapper::toUserResponse);
     }

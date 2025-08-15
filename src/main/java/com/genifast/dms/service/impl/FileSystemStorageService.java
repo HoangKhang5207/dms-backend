@@ -30,11 +30,13 @@ import org.springframework.web.multipart.MultipartFile;
 import com.genifast.dms.common.exception.StorageException;
 import com.genifast.dms.common.exception.StorageFileNotFoundException;
 import com.genifast.dms.entity.Document;
+import com.genifast.dms.entity.Category;
 import com.genifast.dms.entity.FileUpload;
 import com.genifast.dms.repository.DocumentRepository;
 import com.genifast.dms.repository.FileUploadRepository;
 import com.genifast.dms.repository.UserDocumentRepository;
 import com.genifast.dms.repository.UserRepository;
+import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.service.FileStorageService;
 import com.genifast.dms.service.util.CryptoService;
 import com.genifast.dms.service.util.WatermarkService;
@@ -55,11 +57,12 @@ public class FileSystemStorageService implements FileStorageService {
     private final UserDocumentRepository userDocumentRepository;
     private final WatermarkService watermarkService;
     private final UserRepository userRepository;
+    private final CategoryRepository categoryRepository;
 
     public FileSystemStorageService(@Value("${storage.location}") String storageLocation, CryptoService cryptoService,
             DocumentRepository documentRepository, FileUploadRepository fileUploadRepository,
             UserDocumentRepository userDocumentRepository, WatermarkService watermarkService,
-            UserRepository userRepository) {
+            UserRepository userRepository, CategoryRepository categoryRepository) {
         this.rootLocation = Paths.get(storageLocation);
         this.cryptoService = cryptoService;
         this.documentRepository = documentRepository;
@@ -67,6 +70,7 @@ public class FileSystemStorageService implements FileStorageService {
         this.userDocumentRepository = userDocumentRepository;
         this.watermarkService = watermarkService;
         this.userRepository = userRepository;
+        this.categoryRepository = categoryRepository;
     }
 
     @Override
@@ -136,15 +140,15 @@ public class FileSystemStorageService implements FileStorageService {
     }
 
     @Override
-    public List<Document> storeMultipleFiles(MultipartFile[] files, String password) throws Exception {
+    public List<Document> storeMultipleFiles(MultipartFile[] files, String password, Long categoryId, Integer accessType) throws Exception {
         List<Document> uploadedDocuments = new ArrayList<>();
         for (MultipartFile file : files) {
-            uploadedDocuments.add(storeFile(file, password));
+            uploadedDocuments.add(storeFile(file, password, categoryId, accessType));
         }
         return uploadedDocuments;
     }
 
-    private Document storeFile(MultipartFile file, String password) throws Exception {
+    private Document storeFile(MultipartFile file, String password, Long categoryId, Integer accessType) throws Exception {
         Path uploadPath = this.rootLocation.toAbsolutePath().normalize();
         Files.createDirectories(uploadPath);
 
@@ -212,11 +216,24 @@ public class FileSystemStorageService implements FileStorageService {
         document.setCreatedBy(currentUserEmail);
 
         document.setType(fileType);
+        document.setOriginalFilename(originalFileName);
+        document.setContentType(file.getContentType());
         document.setCreatedAt(java.time.Instant.now());
         document.setUpdatedAt(java.time.Instant.now());
         document.setStorageCapacity(file.getSize());
         document.setStorageUnit("bytes");
         document.setPassword(cryptoService.encryptString(effectivePassword, "password_encryption_key"));
+
+        // Map category and related scopes
+        if (categoryId != null) {
+            categoryRepository.findById(categoryId).ifPresent(cat -> {
+                document.setCategory(cat);
+                document.setDepartment(cat.getDepartment());
+                document.setOrganization(cat.getOrganization());
+            });
+        }
+        // accessType default = 1 (INTERNAL) if not provided
+        document.setAccessType(accessType != null ? accessType : 1);
 
         Document savedDocument = documentRepository.save(document);
 

@@ -9,12 +9,12 @@ import java.util.Optional;
 
 @Repository
 public interface RoleRepository extends JpaRepository<Role, Long> {
-    // Tìm role theo tên trong một tổ chức cụ thể
-    Optional<Role> findByNameAndOrganizationId(String name, Long organizationId);
+    // Tìm role theo tên trong một tổ chức cụ thể (truy cập thuộc tính lồng nhau bằng Organization_Id)
+    Optional<Role> findByNameAndOrganization_Id(String name, Long organizationId);
 
     // Tìm role theo tên (cho các role không thuộc tổ chức nào - role hệ thống)
-    Optional<Role> findByNameAndOrganizationIdIsNull(String name);
+    Optional<Role> findByNameAndOrganizationIsNull(String name);
 
     // Lấy tất cả role của một tổ chức
-    List<Role> findByOrganizationId(Long organizationId);
+    List<Role> findByOrganization_Id(Long organizationId);
 }

@@ -10,6 +10,7 @@ import com.genifast.dms.entity.User;
 import com.genifast.dms.repository.DelegationRepository;
 import com.genifast.dms.repository.DocumentRepository;
 import com.genifast.dms.repository.UserRepository;
+import com.genifast.dms.repository.RefreshTokenRepository;
 import com.genifast.dms.config.CustomPermissionEvaluator;
 import org.junit.jupiter.api.*;
 import org.mockito.MockedStatic;
@@ -45,6 +46,9 @@ class DelegationServiceImplTest {
     @Autowired
     private DelegationRepository delegationRepository;
 
+    @Autowired
+    private RefreshTokenRepository refreshTokenRepository;
+
     @MockBean
     private CustomPermissionEvaluator permissionEvaluator;
 
@@ -58,6 +62,8 @@ class DelegationServiceImplTest {
     void setup() {
         delegationRepository.deleteAll();
         documentRepository.deleteAll();
+        // Xóa refresh tokens trước để tránh vi phạm FK khi xóa users
+        refreshTokenRepository.deleteAll();
         userRepository.deleteAll();
 
         String uid = java.util.UUID.randomUUID().toString().substring(0, 8);

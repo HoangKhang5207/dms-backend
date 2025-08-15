@@ -104,7 +104,7 @@ public class DatabaseInitializer implements CommandLineRunner {
             adminUser.setIsAdmin(true); // Giữ lại flag này để tương thích
 
             // Gán role Quản trị viên
-            Role adminRole = roleRepository.findByNameAndOrganizationIdIsNull("Quản trị viên")
+            Role adminRole = roleRepository.findByNameAndOrganizationIsNull("Quản trị viên")
                     .orElseThrow(() -> new RuntimeException("vai trò Quản trị viên role không tồn tại!"));
             adminUser.setRoles(Set.of(adminRole));
 
@@ -148,7 +148,7 @@ public class DatabaseInitializer implements CommandLineRunner {
 
     private void createSystemRoles(Map<String, Permission> permissions) {
         // --- ROLE: Quản trị viên ---
-        if (roleRepository.findByNameAndOrganizationIdIsNull("Quản trị viên").isEmpty()) {
+        if (roleRepository.findByNameAndOrganizationIsNull("Quản trị viên").isEmpty()) {
             Set<Permission> adminPermissions = new HashSet<>(permissions.values()); // Admin có tất cả quyền
             Role adminRole = Role.builder()
                     .name("Quản trị viên")

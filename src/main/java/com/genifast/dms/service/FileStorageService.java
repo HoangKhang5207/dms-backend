@@ -21,7 +21,7 @@ public interface FileStorageService {
 
     void delete(String filename);
 
-    List<Document> storeMultipleFiles(MultipartFile[] files, String password) throws Exception;
+    List<Document> storeMultipleFiles(MultipartFile[] files, String password, Long categoryId, Integer accessType) throws Exception;
 
     byte[] retrieveFileById(String fileId, String password, boolean withWatermark) throws Exception;
 
