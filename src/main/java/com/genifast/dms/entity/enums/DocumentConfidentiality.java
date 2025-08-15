@@ -5,7 +5,8 @@ public enum DocumentConfidentiality {
     INTERNAL(2),
     PRIVATE(3),
     LOCKED(4),
-    PROJECT(5);
+    PROJECT(5),
+    EXTERNAL(6);
 
     private final int value;
 

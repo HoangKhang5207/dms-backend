@@ -373,7 +373,7 @@ public class FileSystemStorageService implements FileStorageService {
 
     @Override
     public List<Document> getAllDocuments() {
-        return documentRepository.findAllByOrderByCreatedAtDesc();
+        return documentRepository.findAllWithCategoryAndOrganization();
     }
 
     @Override

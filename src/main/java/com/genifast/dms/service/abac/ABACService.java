@@ -183,6 +183,9 @@ public class ABACService {
             case PROJECT:
                 return resource.getProjectId() != null && 
                        policyEvaluator.isProjectMember(subject.getUserId(), resource.getProjectId());
+            case EXTERNAL:
+                // Cho phép theo cơ chế chia sẻ tài liệu: user phải có DocumentPermission phù hợp với action
+                return policyEvaluator.hasSharedPermission(subject.getUserId(), resource.getDocumentId(), action.getAction());
             default:
                 return false;
         }

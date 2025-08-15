@@ -20,55 +20,55 @@ import com.genifast.dms.dto.response.DocumentVersionResponse;
 public interface DocumentService {
     DocumentResponse createDocument(String metadataJson, MultipartFile file);
 
-    DocumentResponse getDocumentMetadata(Long docId);
+    DocumentResponse getDocumentMetadata(Long id);
 
-    ResponseEntity<Resource> downloadDocumentFile(Long docId);
+    ResponseEntity<Resource> downloadDocumentFile(Long id);
 
-    DocumentResponse updateDocumentMetadata(Long docId, DocumentUpdateRequest updateDto);
+    DocumentResponse updateDocumentMetadata(Long id, DocumentUpdateRequest updateDto);
 
-    void deleteDocument(Long docId);
+    void deleteDocument(Long id);
 
     Page<DocumentResponse> filterDocuments(DocumentFilterRequest filterDto, Pageable pageable);
 
     Page<DocumentResponse> searchDocuments(SearchAndOrNotRequest searchDto, Pageable pageable);
 
-    DocumentResponse approveDocument(Long docId);
+    DocumentResponse approveDocument(Long id);
 
-    DocumentResponse rejectDocument(Long docId, String reason); // Thêm lý do từ chối
+    DocumentResponse rejectDocument(Long id, String reason); // Thêm lý do từ chối
 
-    void shareDocument(Long docId, DocumentShareRequest shareRequest);
+    void shareDocument(Long id, DocumentShareRequest shareRequest);
 
-    void trackDocumentHistory(Long docId); // Để lấy lịch sử cho audit:log
+    void trackDocumentHistory(Long id); // Để lấy lịch sử cho audit:log
 
-    DocumentResponse submitDocument(Long docId);
+    DocumentResponse submitDocument(Long id);
 
-    void publishDocument(Long docId);
+    void publishDocument(Long id);
 
-    void archiveDocument(Long docId);
+    void archiveDocument(Long id);
 
-    void signDocument(Long docId);
+    void signDocument(Long id);
 
-    void lockDocument(Long docId);
+    void lockDocument(Long id);
 
-    void unlockDocument(Long docId);
+    void unlockDocument(Long id);
 
-    void addComment(Long docId, DocumentCommentRequest commentRequest);
+    void addComment(Long id, DocumentCommentRequest commentRequest);
 
-    void restoreDocument(Long docId);
+    void restoreDocument(Long id);
 
-    List<DocumentVersionResponse> getDocumentVersions(Long docId);
+    List<DocumentVersionResponse> getDocumentVersions(Long id);
 
-    DocumentVersionResponse getSpecificDocumentVersion(Long docId, Integer versionNumber);
+    DocumentVersionResponse getSpecificDocumentVersion(Long id, Integer versionNumber);
 
-    void notifyRecipients(Long docId, String message); // Thêm message để gửi
+    void notifyRecipients(Long id, String message); // Thêm message để gửi
 
-    ResponseEntity<Resource> exportDocument(Long docId, String format); // Thêm định dạng file export
+    ResponseEntity<Resource> exportDocument(Long id, String format); // Thêm định dạng file export
 
-    void forwardDocument(Long docId, String recipientEmail);
+    void forwardDocument(Long id, String recipientEmail);
 
-    void distributeDocument(Long docId, List<Long> departmentIds); // Phân phối tới nhiều phòng ban
+    void distributeDocument(Long id, List<Long> departmentIds); // Phân phối tới nhiều phòng ban
 
     ResponseEntity<Resource> generateDocumentReport(String reportType, Long departmentId); // Báo cáo theo phòng ban
 
-    String createShareLink(Long docId, Instant expiryAt, boolean allowDownload);
+    String createShareLink(Long id, Instant expiryAt, boolean allowDownload);
 }
