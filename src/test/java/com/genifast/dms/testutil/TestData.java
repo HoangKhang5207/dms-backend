@@ -36,6 +36,9 @@ public final class TestData {
     public static final long DOC_PUBLIC_06 = 10600L;   // doc-06 (PUBLIC, APPROVED)
     public static final long DOC_INTERNAL_08 = 10800L; // doc-08 (INTERNAL, DRAFT)
 
+    // Scenario 6 doc ids
+    public static final long DOC_EXTERNAL_05 = 10500L; // doc-05 (EXTERNAL, APPROVED)
+
     // Recipients / Users
     public static final long USER_GV = 7001L;   // giáo viên (internal)
     public static final long USER_PP = 7101L;   // phụ huynh (internal)

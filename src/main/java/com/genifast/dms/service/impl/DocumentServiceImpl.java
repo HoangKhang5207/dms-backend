@@ -271,6 +271,12 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document document = findDocById(id);
 
+        // Không cho phép chia sẻ nếu tài liệu chưa ở trạng thái APPROVED (ví dụ status = 3)
+        // Phục vụ Kịch bản 8.6 theo ai/kich ban.md
+        if (document.getStatus() == null || document.getStatus() != 3) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Document is not in APPROVED status.");
+        }
+
         // Kiểm tra chia sẻ ra ngoài tổ chức (external)
         boolean shareFlagExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
         if (shareFlagExternal) {
@@ -569,6 +575,12 @@ public class DocumentServiceImpl implements DocumentService {
             throw new ApiException(ErrorCode.ACCESS_DENIED, "Access denied from external device for private/locked document.");
         }
 
+        // Cho phép override bằng bản ghi được chia sẻ (private_docs) CHO MỌI accessType
+        // Điều này phục vụ tình huống 8.2: tài liệu phòng ban được chia sẻ cho người ở phòng ban khác
+        if (privateDocumentRepository.findByUserAndDocumentAndStatus(user, document, 1).isPresent()) {
+            return;
+        }
+
         switch (document.getAccessType()) {
             case 1: // Public
                 return;
@@ -586,7 +598,6 @@ public class DocumentServiceImpl implements DocumentService {
                 // Cho phép quản lý tổ chức đọc tài liệu PRIVATE nếu truy cập từ thiết bị công ty
                 if (Boolean.TRUE.equals(user.getIsOrganizationManager())) return;
                 if (document.getCreatedBy().equals(user.getEmail())) return;
-                if (privateDocumentRepository.findByUserAndDocumentAndStatus(user, document, 1).isPresent()) return;
                 break;
         }
         throw new ApiException(ErrorCode.ACCESS_DENIED, "User does not have permission to access this document.");

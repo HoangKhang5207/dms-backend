@@ -58,15 +58,13 @@ public class DocumentController {
     private final FileStorageService fileStorageService;
     private final WatermarkService watermarkService;
 
-    // @PostMapping(consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
-    // public ResponseEntity<DocumentResponse> createDocument(
-    // @RequestPart("metadata") String metadataJson,
-    // @RequestPart("file") MultipartFile file) {
-
-    // DocumentResponse createdDocument =
-    // documentService.createDocument(metadataJson, file);
-    // return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
-    // }
+    @PostMapping(consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+    public ResponseEntity<DocumentResponse> createDocument(
+            @RequestPart("metadata") String metadataJson,
+            @RequestPart("file") MultipartFile file) {
+        DocumentResponse createdDocument = documentService.createDocument(metadataJson, file);
+        return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
+    }
 
     @PostMapping(value = "/upload-multiple", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
     public ResponseEntity<List<Document>> uploadMultipleFiles(
