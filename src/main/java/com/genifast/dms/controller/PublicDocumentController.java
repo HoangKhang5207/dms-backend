@@ -15,6 +15,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
 
 @RestController
@@ -56,6 +57,31 @@ public class PublicDocumentController {
                 .body(resource);
     }
 
+    // [21.4] Xem phiên bản cụ thể của tài liệu PUBLIC sau khi trả phí
+    @GetMapping("/api/v1/documents/public/{token}/versions/{version}")
+    public ResponseEntity<ByteArrayResource> viewPublicDocumentVersion(
+            @PathVariable("token") String token,
+            @PathVariable("version") Integer version,
+            @RequestHeader(value = "X-Payment-Status", required = false) String paymentStatus) throws Exception {
+        Document document = validateAndGetByToken(token);
+
+        boolean ok = paymentStatus != null && (paymentStatus.equalsIgnoreCase("paid") || paymentStatus.equalsIgnoreCase("purchased"));
+        if (!ok) {
+            logAudit("READ_VERSION_FAILED", String.format("Truy cập phiên bản %s fail cho tài liệu ID %s: chưa thanh toán.", String.valueOf(version), document.getId()), document.getId());
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Payment required for full access.");
+        }
+
+        byte[] data = fileStorageService.retrieveFileForVisitor(document);
+        ByteArrayResource resource = new ByteArrayResource(data);
+
+        logAudit("READ_VERSION", String.format("Xem phiên bản %s của tài liệu công khai ID %s sau thanh toán.", String.valueOf(version), document.getId()), document.getId());
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + document.getOriginalFilename() + "\"")
+                .contentType(MediaType.parseMediaType("application/" + document.getType()))
+                .body(resource);
+    }
+
     // --- SCENARIO 7: Visitor endpoints ---
 
     private void logAudit(String action, String details, Long documentId) {
@@ -92,6 +118,20 @@ public class PublicDocumentController {
         return document;
     }
 
+    // [20.1] Khởi tạo thanh toán VNPay (trả về URL sandbox)
+    @PostMapping("/api/v1/documents/public/{token}/initiate-payment")
+    public ResponseEntity<Map<String, String>> initiatePayment(@PathVariable("token") String token) {
+        Document document = validateAndGetByToken(token);
+
+        String paymentUrl = "https://sandbox.vnpay.vn/paymentv2/vpcpay.html";
+
+        logAudit("INITIATE_PAYMENT",
+                String.format("Initiated payment for document ID %s via token %s", document.getId(), token),
+                document.getId());
+
+        return ResponseEntity.ok(Map.of("paymentUrl", paymentUrl));
+    }
+
     // [7.1] Preview tài liệu PUBLIC (một phần, watermark)
     @GetMapping("/api/v1/documents/public/{token}/preview")
     public ResponseEntity<ByteArrayResource> previewPublicDocument(@PathVariable("token") String token) throws Exception {
@@ -114,8 +154,9 @@ public class PublicDocumentController {
             @PathVariable("token") String token,
             @RequestHeader(value = "X-Payment-Status", required = false) String paymentStatus) throws Exception {
         Document document = validateAndGetByToken(token);
-
-        if (paymentStatus == null || !paymentStatus.equalsIgnoreCase("paid")) {
+        // Chấp nhận cả 'paid' và 'purchased' để tương thích kịch bản
+        boolean ok = paymentStatus != null && (paymentStatus.equalsIgnoreCase("paid") || paymentStatus.equalsIgnoreCase("purchased"));
+        if (!ok) {
             logAudit("READ_DOCUMENT_PUBLIC_FAILED", String.format("Truy cập toàn bộ fail cho tài liệu ID %s: chưa thanh toán.", document.getId()), document.getId());
             throw new ApiException(ErrorCode.ACCESS_DENIED, "Payment required for full access.");
         }
