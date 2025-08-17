@@ -23,7 +23,7 @@ import com.genifast.dms.service.workflow.WorkflowService;
 
 @Validated
 @RestController
-@RequestMapping("/api/v1/workflow")
+@RequestMapping("/api/v1/workflows")
 @RequiredArgsConstructor
 @Slf4j
 public class WorkflowController extends BaseController {

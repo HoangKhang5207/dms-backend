@@ -17,12 +17,12 @@ import com.genifast.dms.dto.task.response.TaskInfoResponse;
 import com.genifast.dms.service.task.WTaskService;
 
 @RestController
-@RequestMapping("api/v1/task")
+@RequestMapping("api/v1/tasks")
 @RequiredArgsConstructor
 public class TaskController extends BaseController {
     private final WTaskService taskService;
 
-    @GetMapping("/{document_id}")
+    @GetMapping("/document/{document_id}")
     public ResponseEntity<BaseResponseDto> getTaskInfo(@PathVariable("document_id") Long documentId) {
         try {
             TaskInfoResponse response = taskService.getTaskInfo(documentId);
@@ -36,7 +36,7 @@ public class TaskController extends BaseController {
         }
     }
 
-    @PostMapping("/{document_id}/process")
+    @PostMapping("/document/{document_id}/process")
     @Transactional
     public ResponseEntity<BaseResponseDto> processTask(
             @PathVariable("document_id") Long documentId, @RequestBody ProcessTRequest request) {
