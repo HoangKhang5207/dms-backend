@@ -3,6 +3,7 @@ package com.genifast.dms;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.data.jpa.repository.config.EnableJpaAuditing;
 import org.springframework.scheduling.annotation.EnableAsync;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
@@ -12,6 +13,7 @@ import com.genifast.dms.config.ApplicationProperties;
 @EnableAsync
 @EnableConfigurationProperties(ApplicationProperties.class)
 @EnableScheduling
+@EnableJpaAuditing(auditorAwareRef = "appAuditorAware")
 public class DocumentManagementApplication {
 
 	public static void main(String[] args) {

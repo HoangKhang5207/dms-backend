@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.genifast.dms.common.utils.JwtUtils;
+import com.genifast.dms.entity.workflow.WorkflowDept;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -51,6 +52,10 @@ public class Department {
     @OneToMany(mappedBy = "department", fetch = FetchType.LAZY)
     @Builder.Default
     private Set<Category> categories = new HashSet<>();
+
+    @OneToMany(mappedBy = "department", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private Set<WorkflowDept> workflowDepts = new HashSet<>();
 
     @PrePersist
     protected void onCreate() {
