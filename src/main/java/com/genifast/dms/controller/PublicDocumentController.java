@@ -4,6 +4,8 @@ import com.genifast.dms.common.exception.ApiException;
 import com.genifast.dms.common.constant.ErrorCode;
 import com.genifast.dms.entity.Document;
 import com.genifast.dms.repository.DocumentRepository;
+import com.genifast.dms.entity.DocumentVersion;
+import com.genifast.dms.repository.DocumentVersionRepository;
 import com.genifast.dms.service.FileStorageService;
 import com.genifast.dms.service.AuditLogService;
 import com.genifast.dms.dto.request.AuditLogRequest;
@@ -23,6 +25,8 @@ import java.util.Optional;
 public class PublicDocumentController {
 
     private final DocumentRepository documentRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DocumentVersionRepository documentVersionRepository;
     private final FileStorageService fileStorageService;
     private final AuditLogService auditLogService;
 
@@ -71,7 +75,19 @@ public class PublicDocumentController {
             throw new ApiException(ErrorCode.ACCESS_DENIED, "Payment required for full access.");
         }
 
-        byte[] data = fileStorageService.retrieveFileForVisitor(document);
+        byte[] data;
+        // Ưu tiên nội dung theo version từ bảng document_versions nếu có
+        DocumentVersion dv = null;
+        if (documentVersionRepository != null) {
+            dv = documentVersionRepository
+                    .findByDocumentAndVersionNumber(document, version)
+                    .orElse(null);
+        }
+        if (dv != null && dv.getContent() != null && !dv.getContent().isBlank()) {
+            data = dv.getContent().getBytes();
+        } else {
+            data = fileStorageService.retrieveFileForVisitor(document);
+        }
         ByteArrayResource resource = new ByteArrayResource(data);
 
         logAudit("READ_VERSION", String.format("Xem phiên bản %s của tài liệu công khai ID %s sau thanh toán.", String.valueOf(version), document.getId()), document.getId());

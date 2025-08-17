@@ -2,10 +2,11 @@ package com.genifast.dms.service.impl;
 
 import java.io.IOException;
 import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
+import java.util.Collections;
 import java.util.UUID;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -16,19 +17,22 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.genifast.dms.aop.AuditLog;
 import com.genifast.dms.common.constant.ErrorCode;
 import com.genifast.dms.common.constant.ErrorMessage;
-import com.genifast.dms.common.constant.FileSizeFormatter;
 import com.genifast.dms.common.exception.ApiException;
+import com.genifast.dms.common.constant.FileSizeFormatter;
 import com.genifast.dms.common.utils.JwtUtils;
 import com.genifast.dms.dto.request.DocumentCommentRequest;
 import com.genifast.dms.dto.request.DocumentCreateRequest;
@@ -41,20 +45,19 @@ import com.genifast.dms.dto.response.DocumentVersionResponse;
 import com.genifast.dms.entity.Category;
 import com.genifast.dms.entity.Department;
 import com.genifast.dms.entity.Document;
+import com.genifast.dms.entity.DocumentVersion;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.mapper.DocumentMapper;
 import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
+import com.genifast.dms.repository.DocumentVersionRepository;
 import com.genifast.dms.repository.PrivateDocumentRepository;
 import com.genifast.dms.repository.UserRepository;
 import com.genifast.dms.repository.specifications.DocumentSpecification;
 import com.genifast.dms.service.DocumentService;
 import com.genifast.dms.service.FileStorageService;
 
-import jakarta.servlet.http.HttpServletRequest;
-import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
@@ -66,6 +69,8 @@ public class DocumentServiceImpl implements DocumentService {
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final CategoryRepository categoryRepository;
+    @org.springframework.beans.factory.annotation.Autowired(required = false)
+    private DocumentVersionRepository documentVersionRepository;
     private final PrivateDocumentRepository privateDocumentRepository;
     private final FileStorageService fileStorageService;
     private final DocumentMapper documentMapper;
@@ -433,8 +438,22 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "VIEW_HISTORY")
     public List<DocumentVersionResponse> getDocumentVersions(Long id) {
         log.info("Nghiệp vụ xem lịch sử các phiên bản của tài liệu ID: {}", id);
-        // TODO: Truy vấn bảng DocumentVersions và trả về danh sách
-        return Collections.emptyList();
+        Document document = findDocById(id);
+        if (documentVersionRepository == null) {
+            log.warn("DocumentVersionRepository chưa được tiêm. Trả danh sách rỗng cho getDocumentVersions.");
+            return Collections.emptyList();
+        }
+        List<DocumentVersion> versions = documentVersionRepository.findByDocumentOrderByVersionNumberDesc(document);
+        return versions.stream().map(v -> {
+            DocumentVersionResponse resp = new DocumentVersionResponse();
+            resp.setDocumentId(document.getId());
+            resp.setVersionNumber(v.getVersionNumber());
+            resp.setTitle(v.getTitle());
+            resp.setDescription(v.getDescription());
+            resp.setCreatedBy(v.getCreatedBy());
+            resp.setCreatedAt(v.getCreatedAt());
+            return resp;
+        }).toList();
     }
 
     @Override
@@ -442,8 +461,26 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "VIEW_SPECIFIC_VERSION")
     public DocumentVersionResponse getSpecificDocumentVersion(Long id, Integer versionNumber) {
         log.info("Nghiệp vụ xem phiên bản cụ thể số {} của tài liệu ID: {}", versionNumber, id);
-        // TODO: Truy vấn phiên bản cụ thể và trả về
-        return null;
+        Document document = findDocById(id);
+        // Kiểm tra quyền truy cập tổng thể vào tài liệu
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        authorizeUserCanAccessDocument(currentUser, document);
+
+        if (documentVersionRepository == null) {
+            throw new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "Document version repository not available.");
+        }
+        DocumentVersion version = documentVersionRepository
+            .findByDocumentAndVersionNumber(document, versionNumber)
+            .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "Document version not found."));
+
+        DocumentVersionResponse resp = new DocumentVersionResponse();
+        resp.setDocumentId(document.getId());
+        resp.setVersionNumber(version.getVersionNumber());
+        resp.setTitle(version.getTitle());
+        resp.setDescription(version.getDescription());
+        resp.setCreatedBy(version.getCreatedBy());
+        resp.setCreatedAt(version.getCreatedAt());
+        return resp;
     }
 
     @Override
