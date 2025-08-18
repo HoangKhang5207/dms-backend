@@ -28,7 +28,7 @@ public class BpmnUpload extends BaseEntity {
     @Column(name = "version", nullable = false)
     private int version;
 
-    @Column(name = "process_key", nullable = false)
+    @Column(name = "process_key")
     private String processKey;
 
     @Column(name = "path")
