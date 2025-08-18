@@ -21,6 +21,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.servlet.resource.NoResourceFoundException;
@@ -92,6 +93,35 @@ public class GlobalExceptionHandler {
                                 .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
                                 .message("Validation failed for request body.")
                                 .validationErrors(errors)
+                                .path(request.getRequestURI())
+                                .build();
+                return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        }
+
+        /**
+         * Map lỗi tham số multipart thiếu hoặc lỗi nghiệp vụ đơn giản về 400.
+         */
+        @ExceptionHandler(MissingServletRequestPartException.class)
+        public ResponseEntity<ErrorResponseDTO> handleMissingPart(MissingServletRequestPartException ex,
+                        HttpServletRequest request) {
+                ErrorResponseDTO errorResponse = ErrorResponseDTO.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message(ex.getMessage())
+                                .path(request.getRequestURI())
+                                .build();
+                return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
+        }
+
+        @ExceptionHandler(IllegalArgumentException.class)
+        public ResponseEntity<ErrorResponseDTO> handleIllegalArgument(IllegalArgumentException ex,
+                        HttpServletRequest request) {
+                ErrorResponseDTO errorResponse = ErrorResponseDTO.builder()
+                                .timestamp(LocalDateTime.now())
+                                .status(HttpStatus.BAD_REQUEST.value())
+                                .error(HttpStatus.BAD_REQUEST.getReasonPhrase())
+                                .message(ex.getMessage())
                                 .path(request.getRequestURI())
                                 .build();
                 return new ResponseEntity<>(errorResponse, HttpStatus.BAD_REQUEST);
