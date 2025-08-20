@@ -13,8 +13,6 @@ import lombok.Data;
 @JsonInclude(JsonInclude.Include.NON_NULL)
 public class DocumentShareRequest {
 
-    @Schema(hidden = true)
-    private String recipientEmail;
     // New: support lookup by user ID directly (preferred in Scenario 1)
     @JsonProperty("recipient_id")
     @JsonAlias({"recipientId"})

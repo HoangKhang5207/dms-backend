@@ -109,6 +109,9 @@ public class Document {
     @Builder.Default
     private boolean allowPublicDownload = false; // Mặc định không cho phép tải
 
+    @Column(name = "archived_at")
+    private Instant archivedAt; // thời điểm lưu trữ
+
     @Column(name = "confidentiality")
     @Builder.Default
     private Integer confidentiality = 2; // Default: INTERNAL

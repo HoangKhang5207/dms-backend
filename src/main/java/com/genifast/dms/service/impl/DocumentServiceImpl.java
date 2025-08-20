@@ -47,6 +47,7 @@ import com.genifast.dms.entity.Department;
 import com.genifast.dms.entity.Document;
 import com.genifast.dms.entity.DocumentVersion;
 import com.genifast.dms.entity.User;
+import com.genifast.dms.entity.enums.DocumentStatus;
 import com.genifast.dms.mapper.DocumentMapper;
 import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
@@ -109,7 +110,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .category(category)
                 .department(category.getDepartment())
                 .organization(category.getOrganization())
-                .status(1) // Active
+                .status(DocumentStatus.DRAFT.getValue()) // DRAFT
                 .accessType(createDto.getAccessType())
                 .filePath(filePath)
                 .fileId(category.getDepartment().getName() + "/" + category.getName())
@@ -244,8 +245,7 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "APPROVE_DOCUMENT")
     public DocumentResponse approveDocument(Long id) {
         Document document = findDocById(id);
-        // Giả sử: 2 = PENDING, 3 = APPROVED
-        document.setStatus(3);
+        document.setStatus(DocumentStatus.APPROVED.getValue());
         Document approvedDoc = documentRepository.save(document);
         log.info("Document ID {} has been approved by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
         // TODO: Gửi email thông báo cho người trình duyệt
@@ -258,8 +258,7 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "REJECT_DOCUMENT")
     public DocumentResponse rejectDocument(Long id, String reason) {
         Document document = findDocById(id);
-        // Giả sử: 4 = REJECTED
-        document.setStatus(4);
+        document.setStatus(DocumentStatus.REJECTED.getValue());
         Document rejectedDoc = documentRepository.save(document);
         log.warn("Document ID {} was rejected by {} with reason: {}", id, JwtUtils.getCurrentUserLogin().orElse(""),
                 reason);
@@ -272,13 +271,19 @@ public class DocumentServiceImpl implements DocumentService {
     @PreAuthorize("hasPermission(#id, 'document', 'documents:share:readonly') or hasPermission(#id, 'document', 'documents:share:forwardable') or hasPermission(#id, 'document', 'documents:share:timebound') or hasPermission(#id, 'document', 'documents:share:orgscope')")
     @AuditLog(action = "SHARE_DOCUMENT")
     public void shareDocument(Long id, DocumentShareRequest shareRequest) {
-        log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng {}", id, shareRequest.getRecipientEmail());
+        log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng ID {}", id, shareRequest.getRecipientId());
 
         Document document = findDocById(id);
 
-        // Không cho phép chia sẻ nếu tài liệu chưa ở trạng thái APPROVED (ví dụ status = 3)
+        // Validate recipient is required (by ID only)
+        Long recipientId = shareRequest.getRecipientId();
+        if (recipientId == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "recipient_id is required");
+        }
+
+        // Không cho phép chia sẻ nếu tài liệu chưa ở trạng thái APPROVED
         // Phục vụ Kịch bản 8.6 theo ai/kich ban.md
-        if (document.getStatus() == null || document.getStatus() != 3) {
+        if (document.getStatus() == null || !document.getStatus().equals(DocumentStatus.APPROVED.getValue())) {
             throw new ApiException(ErrorCode.ACCESS_DENIED, "Document is not in APPROVED status.");
         }
 
@@ -293,11 +298,8 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
-        String recipientEmail = shareRequest.getRecipientEmail();
-        User recipient = null;
-        if (recipientEmail != null && !recipientEmail.isBlank()) {
-            recipient = userRepository.findByEmail(recipientEmail)
-                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.INVALID_USER.getMessage()));
+        User recipient = userRepository.findById(recipientId)
+            .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, "Recipient not found"));
             // Người nhận không hoạt động
             if (recipient.getStatus() != null && recipient.getStatus() != 1) {
                 throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not active.");
@@ -312,18 +314,15 @@ public class DocumentServiceImpl implements DocumentService {
                     throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient is not in the same organization.");
                 }
             }
-        }
 
         // Tối thiểu: chặn chia sẻ tài liệu PRIVATE cho người không thuộc private_docs
         if (document.getAccessType() != null && document.getAccessType() == 4) { // PRIVATE
-            if (recipientEmail != null && !recipientEmail.isBlank()) {
-                boolean recipientAuthorized = privateDocumentRepository
-                    .findByUserAndDocumentAndStatus(recipient, document, 1)
-                    .isPresent();
+            boolean recipientAuthorized = privateDocumentRepository
+                .findByUserAndDocumentAndStatus(recipient, document, 1)
+                .isPresent();
 
-                if (!recipientAuthorized) {
-                    throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not authorized for private document.");
-                }
+            if (!recipientAuthorized) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not authorized for private document.");
             }
         }
 
@@ -345,8 +344,7 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "SUBMIT_DOCUMENT")
     public DocumentResponse submitDocument(Long id) {
         Document document = findDocById(id);
-        // Giả sử: 1 = DRAFT, 2 = PENDING
-        document.setStatus(2);
+        document.setStatus(DocumentStatus.PENDING.getValue());
         Document submittedDoc = documentRepository.save(document);
         log.info("Document ID {} has been submitted for approval by {}", id,
                 JwtUtils.getCurrentUserLogin().orElse(""));
@@ -369,7 +367,15 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "ARCHIVE_DOCUMENT")
     public void archiveDocument(Long id) {
         log.info(" nghiệp vụ lưu trữ tài liệu ID: {}", id);
-        // TODO: Implement chi tiết logic lưu trữ, thay đổi trạng thái
+        Document document = findDocById(id);
+        if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
+            log.info("Document ID {} đã ở trạng thái ARCHIVED", id);
+            return;
+        }
+        document.setStatus(DocumentStatus.ARCHIVED.getValue());
+        document.setArchivedAt(Instant.now());
+        documentRepository.save(document);
+        log.info("Đã lưu trữ document ID {} (status=ARCHIVED)", id);
     }
 
     @Override
@@ -430,7 +436,15 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "RESTORE_DOCUMENT")
     public void restoreDocument(Long id) {
         log.info("Nghiệp vụ khôi phục tài liệu ID: {} từ trạng thái lưu trữ", id);
-        // TODO: Thay đổi trạng thái tài liệu từ "ARCHIVED" về "ACTIVE"
+        Document document = findDocById(id);
+        if (document.getStatus() == null || !document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
+            log.info("Document ID {} không ở trạng thái ARCHIVED", id);
+            return;
+        }
+        document.setStatus(DocumentStatus.DRAFT.getValue());
+        document.setArchivedAt(null);
+        documentRepository.save(document);
+        log.info("Đã khôi phục document ID {} (status=DRAFT)", id);
     }
 
     @Override

@@ -155,7 +155,7 @@ public class AuditLoggingAspect {
                         shareDetails += " (có thời hạn)";
                     if (req.getIsShareToExternal() != null && req.getIsShareToExternal())
                         shareDetails += " (ra ngoài tổ chức)";
-                    return String.format("Chia sẻ tài liệu ID %s cho '%s'%s.%s", args[0], req.getRecipientEmail(),
+                    return String.format("Chia sẻ tài liệu ID %s cho user ID '%s'%s.%s", args[0], req.getRecipientId(),
                             shareDetails, delegationInfo);
                 }
                 return String.format("Chia sẻ công khai cho tài liệu ID %s.%s", args[0], delegationInfo);
