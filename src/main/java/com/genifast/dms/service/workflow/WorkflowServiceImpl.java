@@ -107,7 +107,8 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
       List<WorkflowSteps> steps = triple.getRight();
 
       Workflow workflow = workflowMapper.toEntity(workflowDto);
-      workflow.setVersion(0);
+      workflow.setOrganization(bpmnUpload.getOrganization());
+      workflow.setVersion(1);
       workflow.setStartedRole(startedRole);
       Workflow newWorkflow = create(workflow);
       log.info("[deployProcess] Workflow saved, id={}", newWorkflow.getId());

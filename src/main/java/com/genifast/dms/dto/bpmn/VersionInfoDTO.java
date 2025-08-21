@@ -15,7 +15,7 @@ public class VersionInfoDTO {
 
     private String name;
 
-    private String lastModifiedBy;
+    private String updatedBy;
 
-    private Instant lastModifiedDate;
+    private Instant updatedAt;
 }

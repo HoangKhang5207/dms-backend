@@ -4,6 +4,7 @@ import java.util.List;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.genifast.dms.common.constant.ErrorCode;
 import com.genifast.dms.common.constant.ErrorMessage;
@@ -123,6 +124,7 @@ public class BpmnServiceImpl extends BaseServiceImpl<BpmnUpload, Long, BpmnUploa
   }
 
   @Override
+  @Transactional
   public BpmnUploadDTO saveBpmnUpload(SaveBRequest saveBRequest, Long organizationId) {
     BpmnUpload bpmnUpload;
     boolean isUpdate = saveBRequest.getBpmnUploadId() != null;
@@ -141,7 +143,7 @@ public class BpmnServiceImpl extends BaseServiceImpl<BpmnUpload, Long, BpmnUploa
       bpmnUpload.setVersion(bpmnUpload.getVersion() + 1);
     } else {
       bpmnUpload = new BpmnUpload();
-      bpmnUpload.setVersion(0);
+      bpmnUpload.setVersion(1);
     }
 
     try {
@@ -163,9 +165,19 @@ public class BpmnServiceImpl extends BaseServiceImpl<BpmnUpload, Long, BpmnUploa
       throw new RuntimeException("File upload failed: " + e.getMessage(), e);
     }
 
-    BpmnUpload newBpmnUpload = createOrUpdate(bpmnUpload);
-    log.info("[saveBpmnUpload] Save successful, id={}", newBpmnUpload.getId());
-    BpmnUploadDTO bpmnUploadDto = bpmnUploadMapper.toDto(newBpmnUpload);
+    // 1. Lưu bản ghi chính
+    BpmnUpload savedBpmnUpload = createOrUpdate(bpmnUpload);
+    log.info("[saveBpmnUpload] Save successful, id={}", savedBpmnUpload.getId());
+
+    // *** LOGIC MỚI: TẠO BẢN GHI LỊCH SỬ ***
+    // 2. Tạo và lưu bản ghi lịch sử
+    BpmnUploadHistory history = bpmnUploadHistoryMapper.fromBpmnUpload(savedBpmnUpload);
+    bpmnUploadHistoryRepository.save(history);
+    log.info("[saveBpmnUpload] Created history record for BpmnUpload ID {} version {}", savedBpmnUpload.getId(),
+        savedBpmnUpload.getVersion());
+    // *** KẾT THÚC LOGIC MỚI ***
+
+    BpmnUploadDTO bpmnUploadDto = bpmnUploadMapper.toDto(savedBpmnUpload);
     log.info("[saveBpmnUpload] Output DTO: {}", bpmnUploadDto);
     return bpmnUploadDto;
   }

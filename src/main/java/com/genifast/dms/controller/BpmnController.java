@@ -1,8 +1,14 @@
 package com.genifast.dms.controller;
 
+import java.io.InputStream;
+import java.net.URL;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.core.io.InputStreamResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.validation.annotation.Validated;
@@ -24,6 +30,31 @@ import com.genifast.dms.service.bpmn.BpmnService;
 @Slf4j
 public class BpmnController extends BaseController {
     private final BpmnService bpmnService;
+
+    // *** ENDPOINT MỚI ĐỂ LÀM PROXY ***
+    @GetMapping("/file-proxy")
+    public ResponseEntity<Resource> proxyBpmnFile(@RequestParam("url") String fileUrl) {
+        log.info("[proxyBpmnFile] Proxifying request for URL: {}", fileUrl);
+        try {
+            // Mở một stream trực tiếp từ URL của Azure
+            URL url = new URL(fileUrl);
+            InputStream inputStream = url.openStream();
+
+            // Bọc stream trong một InputStreamResource để Spring Boot có thể xử lý
+            InputStreamResource resource = new InputStreamResource(inputStream);
+
+            // Trả về nội dung file với đúng content type
+            return ResponseEntity.ok()
+                    .contentType(MediaType.APPLICATION_XML) // BPMN file là XML
+                    .body(resource);
+
+        } catch (Exception e) {
+            log.error("[proxyBpmnFile] Error while proxifying file: {}", e.getMessage(), e);
+            return ResponseEntity.status(500)
+                    .body(null); // Trả về lỗi 500 với resource rỗng
+        }
+    }
+    // *** KẾT THÚC ENDPOINT MỚI ***
 
     @GetMapping("/organization/{organization_id}")
     public ResponseEntity<BaseResponseDto> getBpmnList(

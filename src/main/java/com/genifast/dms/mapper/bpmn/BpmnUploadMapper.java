@@ -14,8 +14,10 @@ public interface BpmnUploadMapper {
 
   @Mapping(source = "path", target = "path", qualifiedByName = "generateSASToken")
   @Mapping(source = "pathSvg", target = "pathSvg", qualifiedByName = "generateSASToken")
+  @Mapping(source = "organization.id", target = "organizationId")
   BpmnUploadDTO toDto(BpmnUpload bpmnUpload);
 
+  @Mapping(target = "organization", ignore = true)
   BpmnUpload toEntity(BpmnUploadDTO bpmnUploadDto);
 
   List<BpmnUploadDTO> toDtos(List<BpmnUpload> bpmnUploads);

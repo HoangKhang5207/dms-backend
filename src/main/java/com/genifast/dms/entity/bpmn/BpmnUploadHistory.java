@@ -32,7 +32,7 @@ public class BpmnUploadHistory extends BaseEntity {
     @Column(name = "name", nullable = false)
     private String name;
 
-    @Column(name = "process_key", nullable = false)
+    @Column(name = "process_key")
     private String processKey;
 
     @Column(name = "path")

@@ -35,11 +35,11 @@ public class WorkflowDTO {
 
     private String createdBy;
 
-    private Instant createdDate;
+    private Instant createdAt;
 
-    private String lastModifiedBy;
+    private String updatedBy;
 
-    private Instant lastModifiedDate;
+    private Instant updatedAt;
 
     private Long bpmnUploadId;
 

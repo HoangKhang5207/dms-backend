@@ -29,11 +29,13 @@ public class BpmnUploadHistoryDTO {
 
   private Boolean isDraft;
 
+  private Boolean isPublished;
+
   private Boolean isDeployed;
 
   private Long organizationId;
 
-  private String lastModifiedBy;
+  private String updatedBy;
 
-  private Instant lastModifiedDate;
+  private Instant updatedAt;
 }
