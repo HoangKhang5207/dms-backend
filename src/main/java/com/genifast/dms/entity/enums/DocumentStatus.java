@@ -5,7 +5,10 @@ public enum DocumentStatus {
     PENDING(2),
     APPROVED(3),
     REJECTED(4),
-    ARCHIVED(5);
+    ARCHIVED(5),
+    WITHDRAWN(6),
+    REPLACED(7),
+    EXPIRED(8);
 
     private final int value;
 

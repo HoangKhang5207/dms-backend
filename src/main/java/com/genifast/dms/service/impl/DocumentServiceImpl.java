@@ -3,6 +3,7 @@ package com.genifast.dms.service.impl;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.UUID;
 
@@ -17,8 +18,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -45,13 +44,16 @@ import com.genifast.dms.dto.response.DocumentVersionResponse;
 import com.genifast.dms.entity.Category;
 import com.genifast.dms.entity.Department;
 import com.genifast.dms.entity.Document;
+import com.genifast.dms.entity.DocumentPermission;
 import com.genifast.dms.entity.DocumentVersion;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.entity.enums.DocumentStatus;
+import com.genifast.dms.entity.enums.DocumentConfidentiality;
 import com.genifast.dms.mapper.DocumentMapper;
 import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
+import com.genifast.dms.repository.DocumentPermissionRepository;
 import com.genifast.dms.repository.DocumentVersionRepository;
 import com.genifast.dms.repository.PrivateDocumentRepository;
 import com.genifast.dms.repository.UserRepository;
@@ -73,6 +75,7 @@ public class DocumentServiceImpl implements DocumentService {
     @org.springframework.beans.factory.annotation.Autowired(required = false)
     private DocumentVersionRepository documentVersionRepository;
     private final PrivateDocumentRepository privateDocumentRepository;
+    private final DocumentPermissionRepository documentPermissionRepository;
     private final FileStorageService fileStorageService;
     private final DocumentMapper documentMapper;
     private final ObjectMapper objectMapper;
@@ -268,12 +271,20 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#id, 'document', 'documents:share:readonly') or hasPermission(#id, 'document', 'documents:share:forwardable') or hasPermission(#id, 'document', 'documents:share:timebound') or hasPermission(#id, 'document', 'documents:share:orgscope')")
+    @PreAuthorize("isAuthenticated()")
     @AuditLog(action = "SHARE_DOCUMENT")
     public void shareDocument(Long id, DocumentShareRequest shareRequest) {
         log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng ID {}", id, shareRequest.getRecipientId());
 
         Document document = findDocById(id);
+
+        // Current user (sharer)
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+
+        // Only owner (uploader) can share their documents
+        if (document.getCreatedBy() == null || !document.getCreatedBy().equals(currentUser.getEmail())) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Only the owner can share this document.");
+        }
 
         // Validate recipient is required (by ID only)
         Long recipientId = shareRequest.getRecipientId();
@@ -281,52 +292,123 @@ public class DocumentServiceImpl implements DocumentService {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "recipient_id is required");
         }
 
-        // Không cho phép chia sẻ nếu tài liệu chưa ở trạng thái APPROVED
-        // Phục vụ Kịch bản 8.6 theo ai/kich ban.md
+        // Validate permissions: must be present and only allowed base permissions
+        List<String> basePerms = List.of(
+            "documents:share:readonly",
+            "documents:share:forwardable",
+            "documents:share:shareable"
+        );
+        List<String> incomingPerms = shareRequest.getPermissions();
+        if (incomingPerms == null || incomingPerms.isEmpty()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "permissions is required and must not be empty");
+        }
+        for (String p : incomingPerms) {
+            if (!basePerms.contains(p)) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "permissions contains unsupported value: " + p);
+            }
+        }
+
+        // Load recipient & basic checks
+        User recipient = userRepository.findById(recipientId)
+            .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, "Recipient not found"));
+        if (recipient.getStatus() != null && recipient.getStatus() != 1) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not active.");
+        }
+
+        // Validate document status must be APPROVED
         if (document.getStatus() == null || !document.getStatus().equals(DocumentStatus.APPROVED.getValue())) {
             throw new ApiException(ErrorCode.ACCESS_DENIED, "Document is not in APPROVED status.");
         }
 
-        // Kiểm tra chia sẻ ra ngoài tổ chức (external)
-        boolean shareFlagExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
-        if (shareFlagExternal) {
-            Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-            boolean hasExternalAuthority = authentication != null && authentication.getAuthorities().stream()
-                .anyMatch(a -> "documents:share:external".equals(a.getAuthority()));
-            if (!hasExternalAuthority) {
-                throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient is not in the same organization.");
+        // Determine actual scope by organization relationship
+        boolean sameOrg = currentUser.getOrganization() != null && recipient.getOrganization() != null
+            && currentUser.getOrganization().getId().equals(recipient.getOrganization().getId());
+        boolean requestedExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
+        boolean actualExternal = !sameOrg;
+
+        // Enforce that request flag matches actual relationship
+        if (requestedExternal != actualExternal) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST,
+                "is_share_to_external does not match actual organization relationship between sharer and recipient");
+        }
+
+        // Confidentiality suitability rules
+        Integer confidentiality = document.getConfidentiality();
+        if (Boolean.TRUE.equals(requestedExternal)) {
+            // External: only PUBLIC or EXTERNAL
+            if (confidentiality != null && !(confidentiality.equals(DocumentConfidentiality.PUBLIC.getValue())
+                    || confidentiality.equals(DocumentConfidentiality.EXTERNAL.getValue()))) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED,
+                        "Document confidentiality not suitable for external sharing.");
+            }
+        } else {
+            // Internal: allow PUBLIC, INTERNAL, PROJECT; block EXTERNAL, and guard PRIVATE/LOCKED via private_docs
+            if (confidentiality != null && confidentiality.equals(DocumentConfidentiality.EXTERNAL.getValue())) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED,
+                        "Document confidentiality not suitable for internal sharing.");
             }
         }
 
-        User recipient = userRepository.findById(recipientId)
-            .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, "Recipient not found"));
-            // Người nhận không hoạt động
-            if (recipient.getStatus() != null && recipient.getStatus() != 1) {
-                throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not active.");
+        // PRIVATE or LOCKED require explicit authorization via private_docs; also disallow external for these
+        if (confidentiality != null && (confidentiality.equals(DocumentConfidentiality.PRIVATE.getValue())
+                || confidentiality.equals(DocumentConfidentiality.LOCKED.getValue()))) {
+            if (requestedExternal) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED, "Private/Locked document cannot be shared externally.");
             }
-            boolean recipientOutsideOrg = (recipient.getOrganization() == null ||
-                !recipient.getOrganization().getId().equals(document.getOrganization().getId()));
-            if (recipientOutsideOrg) {
-                Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-                boolean hasExternalAuthority = authentication != null && authentication.getAuthorities().stream()
-                    .anyMatch(a -> "documents:share:external".equals(a.getAuthority()));
-                if (!hasExternalAuthority) {
-                    throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient is not in the same organization.");
-                }
-            }
-
-        // Tối thiểu: chặn chia sẻ tài liệu PRIVATE cho người không thuộc private_docs
-        if (document.getAccessType() != null && document.getAccessType() == 4) { // PRIVATE
             boolean recipientAuthorized = privateDocumentRepository
                 .findByUserAndDocumentAndStatus(recipient, document, 1)
                 .isPresent();
-
             if (!recipientAuthorized) {
-                throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not authorized for private document.");
+                throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not authorized for private/locked document.");
             }
         }
 
-        // TODO: Implement logic chia sẻ, tạo bản ghi trong bảng private_docs
+        // Validate timebound inputs
+        Instant toDate = shareRequest.getToDate();
+        Instant fromDate = shareRequest.getFromDate();
+        if ((fromDate == null) ^ (toDate == null)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "from_date and to_date must be provided together");
+        }
+        if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "to_date must be after or equal to from_date");
+        }
+
+        // Build permissions to persist
+        List<String> finalPerms = new ArrayList<>(incomingPerms);
+
+        // Auto-add timebound only when both from/to provided
+        if (fromDate != null && toDate != null) {
+            if (!finalPerms.contains("documents:share:timebound")) {
+                finalPerms.add("documents:share:timebound");
+            }
+        }
+
+        // Add scope permission based on is_share_to_external flag
+        boolean shareFlagExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
+        if (shareFlagExternal) {
+            if (!finalPerms.contains("documents:share:external")) {
+                finalPerms.add("documents:share:external");
+            }
+        } else {
+            if (!finalPerms.contains("documents:share:orgscope")) {
+                finalPerms.add("documents:share:orgscope");
+            }
+        }
+
+        // Replace existing permissions for this recipient & document to avoid duplicates
+        documentPermissionRepository.deleteByUserIdAndDocId(recipientId, id);
+
+        // Persist one row per permission
+        for (String perm : finalPerms) {
+            DocumentPermission dp = DocumentPermission.builder()
+                .userId(recipientId)
+                .docId(id)
+                .permission(perm)
+                .versionNumber(document.getVersionNumber())
+                .expiryDate((fromDate != null && toDate != null) ? toDate : null)
+                .build();
+            documentPermissionRepository.save(dp);
+        }
     }
 
     @Override

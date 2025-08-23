@@ -759,7 +759,7 @@ public class DatabaseInitializer implements CommandLineRunner {
             return ids.toString();
         };
 
-        // doc-01: INTERNAL + PENDING, P.DTAO, Quy chế, recipients [user-ht, user-cv]
+        // doc-01: INTERNAL + APPROVED, P.DTAO, Quy chế, recipients [user-ht, user-cv]
         Document doc01 = Document.builder()
                 .title("Quy chế tuyển sinh 2026")
                 .content("Dummy content")
@@ -769,7 +769,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 .department(departments.get("P.DTAO"))
                 .category(catQuyChe)
                 .confidentiality(DocumentConfidentiality.INTERNAL.getValue())
-                .status(DocumentStatus.PENDING.getValue())
+                .status(DocumentStatus.APPROVED.getValue())
                 .versionNumber(1)
                 .recipients(recipientIdsJson.apply(List.of("hieutruong@genifast.edu.vn", "chuyenvien.dtao@genifast.edu.vn")))
                 .createdBy("chuyenvien.dtao@genifast.edu.vn")
