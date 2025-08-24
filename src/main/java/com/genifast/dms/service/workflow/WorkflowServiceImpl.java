@@ -39,10 +39,12 @@ import com.genifast.dms.entity.workflow.Workflow;
 import com.genifast.dms.entity.workflow.WorkflowDept;
 import com.genifast.dms.entity.workflow.WorkflowEle;
 import com.genifast.dms.entity.workflow.WorkflowSteps;
+import com.genifast.dms.mapper.bpmn.BpmnUploadHistoryMapper;
 import com.genifast.dms.mapper.bpmn.BpmnUploadMapper;
 import com.genifast.dms.mapper.workflow.WorkflowEleMapper;
 import com.genifast.dms.mapper.workflow.WorkflowMapper;
 import com.genifast.dms.repository.DepartmentRepository;
+import com.genifast.dms.repository.bpmn.BpmnUploadHistoryRepository;
 import com.genifast.dms.repository.bpmn.BpmnUploadRepository;
 import com.genifast.dms.repository.workflow.WorkflowEleRepository;
 import com.genifast.dms.repository.workflow.WorkflowOrgRepository;
@@ -59,6 +61,7 @@ import com.genifast.dms.service.task.WTaskService;
 public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, WorkflowRepository>
     implements WorkflowService {
   private final BpmnUploadRepository bpmnUploadRepository;
+  private final BpmnUploadHistoryRepository bpmnUploadHistoryRepository;
   private final RuntimeService runtimeService;
   private final RepositoryService repositoryService;
 
@@ -66,6 +69,7 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
   private final AzureStorageService azureStorageService;
 
   private final BpmnUploadMapper bpmnUploadMapper;
+  private final BpmnUploadHistoryMapper bpmnUploadHistoryMapper;
   private final WorkflowMapper workflowMapper;
   private final WorkflowEleMapper workflowEleMapper;
 
@@ -127,7 +131,11 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
 
       bpmnUpload.setIsDeployed(true);
       bpmnUpload.setProcessKey(processKey);
-      bpmnUploadRepository.save(bpmnUpload);
+      bpmnUpload = bpmnUploadRepository.save(bpmnUpload);
+      log.info("[deployProcess] BPMN upload updated, id={}", bpmnUpload.getId());
+
+      // Lưu lịch sử deploy
+      bpmnUploadHistoryRepository.save(bpmnUploadHistoryMapper.fromBpmnUpload(bpmnUpload));
 
       // Deploy BPMN file đã được cập nhật (có condition)
       Deployment deployment = repositoryService
@@ -203,12 +211,23 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
 
       WorkflowEle workflowEle = workflowEleRepository.findByWorkflowId(workflow.getId()).orElse(null);
       if (workflowEle != null) {
-        workflowEleRepository.delete(workflowEle);
+        WorkflowEle newWorkflowEle = workflowEleMapper.toEntity(workflowEleDTO);
+        workflowEle.setCategoryIds(newWorkflowEle.getCategoryIds());
+        workflowEle.setUrgency(newWorkflowEle.getUrgency());
+        workflowEle.setSecurity(newWorkflowEle.getSecurity());
+        workflowEle = workflowEleRepository.save(workflowEle);
+        log.info("[deployProcess] Success, workflowEleId={}", workflowEle.getId());
+      } else {
+        WorkflowEle newWorkflowEle = workflowEleMapper.toEntity(workflowEleDTO);
+        newWorkflowEle.setWorkflow(workflow);
+        newWorkflowEle = workflowEleRepository.save(newWorkflowEle);
+        log.info("[deployProcess] Success, workflowEleId={}", newWorkflowEle.getId());
       }
-      WorkflowEle newWorkflowEle = workflowEleMapper.toEntity(workflowEleDTO);
-      newWorkflowEle.setWorkflow(workflow);
-      newWorkflowEle = workflowEleRepository.save(newWorkflowEle);
-      log.info("[deployProcess] Success, workflowEleId={}", newWorkflowEle.getId());
+      // WorkflowEle newWorkflowEle = workflowEleMapper.toEntity(workflowEleDTO);
+      // newWorkflowEle.setWorkflow(workflow);
+      // newWorkflowEle = workflowEleRepository.save(newWorkflowEle);
+      // log.info("[deployProcess] Success, workflowEleId={}",
+      // newWorkflowEle.getId());
     } catch (ResourceNotFoundException e) {
       log.error("[assignEle] Not found: {}", e.getMessage(), e);
       throw e;
@@ -378,6 +397,16 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
 
     String processKey = xpath.evaluate("//bpmn:process/@id", doc);
     log.info("[parseBpmnFile] Process key: {}", processKey);
+
+    // Thêm camunda:historyTimeToLive nếu chưa có
+    NodeList processNodes = (NodeList) xpath.evaluate("//bpmn:process", doc, XPathConstants.NODESET);
+    if (processNodes.getLength() > 0) {
+      Element processElement = (Element) processNodes.item(0);
+      // Set giá trị mặc định, ví dụ P180D (180 ngày).
+      // Bạn có thể lấy giá trị này từ file config nếu muốn.
+      processElement.setAttribute("camunda:historyTimeToLive", "P180D");
+      log.info("[parseBpmnFile] Đã thêm camunda:historyTimeToLive='P180D' vào process key: {}", processKey);
+    }
 
     // 0. Thêm condition DEFAULT vào những flow chưa có condition
     addDefaultConditionsToFlows(doc, xpath);

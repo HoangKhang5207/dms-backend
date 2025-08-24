@@ -28,7 +28,7 @@ public class WorkflowCRepositoryImpl implements WorkflowCRepository {
 
     cq.select(workflowJoin)
         .where(
-            cb.equal(workflowDeptRoot.get("departmentId"), departmentId),
+            cb.equal(workflowDeptRoot.get("department").get("id"), departmentId),
             cb.equal(workflowJoin.get("startedRole"), role));
 
     TypedQuery<Workflow> query = em.createQuery(cq);
