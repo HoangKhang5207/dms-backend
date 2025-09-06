@@ -23,6 +23,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.ListOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -40,6 +41,9 @@ public class AuditLogServiceImpl implements AuditLogService {
     private final StringRedisTemplate redisTemplate; // Dùng StringRedisTemplate cho JSON
     private final ObjectMapper objectMapper;
 
+    @Value("${audit.sync-mode:false}")
+    private boolean syncMode;
+
     private static final String AUDIT_LOG_QUEUE_KEY = "dms:audit_log_queue";
     private ListOperations<String, String> listOps;
 
@@ -51,12 +55,50 @@ public class AuditLogServiceImpl implements AuditLogService {
     @Override
     @Async
     public void logAction(AuditLogRequest logRequest) {
+        if (syncMode) {
+            // Synchronous mode for testing - save directly to DB
+            saveSingleLogEntry(logRequest);
+        } else {
+            try {
+                // Serialize DTO thành JSON và đẩy vào Redis
+                String logAsJson = objectMapper.writeValueAsString(logRequest);
+                listOps.leftPush(AUDIT_LOG_QUEUE_KEY, logAsJson);
+            } catch (Exception e) {
+                log.error("Không thể đẩy log vào Redis: {}", e.getMessage(), e);
+            }
+        }
+    }
+
+    @Transactional
+    private void saveSingleLogEntry(AuditLogRequest logRequest) {
         try {
-            // Serialize DTO thành JSON và đẩy vào Redis
-            String logAsJson = objectMapper.writeValueAsString(logRequest);
-            listOps.leftPush(AUDIT_LOG_QUEUE_KEY, logAsJson);
+            User user = userRepository.findById(logRequest.getUserId()).orElse(null);
+            Document document = logRequest.getDocumentId() != null
+                    ? documentRepository.findById(logRequest.getDocumentId()).orElse(null)
+                    : null;
+            User delegatedBy = logRequest.getDelegatedByUserId() != null
+                    ? userRepository.findById(logRequest.getDelegatedByUserId()).orElse(null)
+                    : null;
+
+            if (user == null) {
+                log.warn("Bỏ qua log vì không tìm thấy user với ID: {}", logRequest.getUserId());
+                return;
+            }
+
+            AuditLog auditLog = AuditLog.builder()
+                    .user(user)
+                    .document(document)
+                    .delegatedBy(delegatedBy)
+                    .action(logRequest.getAction())
+                    .details(logRequest.getDetails())
+                    .ipAddress(logRequest.getIpAddress())
+                    .sessionId(logRequest.getSessionId())
+                    .build();
+
+            auditLogRepository.save(auditLog);
+            log.debug("Đã lưu audit log đồng bộ cho action: {}", logRequest.getAction());
         } catch (Exception e) {
-            log.error("Không thể đẩy log vào Redis: {}", e.getMessage(), e);
+            log.error("Lỗi khi lưu audit log đồng bộ: {}", e.getMessage(), e);
         }
     }
 

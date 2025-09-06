@@ -29,9 +29,13 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.genifast.dms.common.constant.ErrorCode;
+import com.genifast.dms.common.exception.ApiException;
 import com.genifast.dms.dto.request.DocumentCommentRequest;
 import com.genifast.dms.dto.request.DocumentFilterRequest;
+import com.genifast.dms.dto.request.DocumentReviewRequest;
 import com.genifast.dms.dto.request.DocumentShareRequest;
+import com.genifast.dms.dto.request.DocumentSignRequest;
 import com.genifast.dms.dto.request.DocumentUpdateRequest;
 import com.genifast.dms.dto.request.SearchAndOrNotRequest;
 import com.genifast.dms.dto.response.DocumentResponse;
@@ -267,6 +271,24 @@ public class DocumentController {
 
     // ==========Bổ sung các endpoint giả định cho DMS - các hành động quản lý tài
     // liệu==========
+    @PostMapping("/{id}/review")
+    public ResponseEntity<DocumentResponse> reviewDocument(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody DocumentReviewRequest reviewRequest) {
+        
+        if ("approve".equals(reviewRequest.getAction())) {
+            return ResponseEntity.ok(documentService.approveDocument(id));
+        } else if ("reject".equals(reviewRequest.getAction())) {
+            String reason = reviewRequest.getReason();
+            if (reason == null || reason.trim().isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Reason is required for reject action");
+            }
+            return ResponseEntity.ok(documentService.rejectDocument(id, reason));
+        } else {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Invalid action. Must be 'approve' or 'reject'");
+        }
+    }
+
     @PostMapping("/{id}/approve")
     public ResponseEntity<DocumentResponse> approveDocument(@PathVariable("id") Long id) {
         return ResponseEntity.ok(documentService.approveDocument(id));
@@ -310,9 +332,31 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/sign")
-    public ResponseEntity<Map<String, String>> signDocument(@PathVariable("id") Long id) {
+    public ResponseEntity<Map<String, String>> signDocument(
+            @PathVariable("id") Long id,
+            @RequestBody(required = false) DocumentSignRequest signRequest) {
+        
+        // If body is provided, validate action and details
+        if (signRequest != null) {
+            String action = signRequest.getAction();
+            String details = signRequest.getDetails();
+            
+            if (action == null || action.trim().isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Action is required when body is provided");
+            }
+            
+            if (!"sign".equals(action) && !"stamp".equals(action)) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Invalid action. Must be 'sign' or 'stamp'");
+            }
+            
+            if (details == null || details.trim().isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Details is required for signing/stamping");
+            }
+        }
+        
         documentService.signDocument(id);
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được ký thành công."));
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Tài liệu đã được ký thành công."));
     }
 
     @PostMapping("/{id}/lock")

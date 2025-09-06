@@ -759,7 +759,7 @@ public class DatabaseInitializer implements CommandLineRunner {
             return ids.toString();
         };
 
-        // doc-01: INTERNAL + APPROVED, P.DTAO, Quy chế, recipients [user-ht, user-cv]
+        // doc-01: INTERNAL + PENDING, P.DTAO, Quy chế, recipients [user-ht, user-cv]
         Document doc01 = Document.builder()
                 .title("Quy chế tuyển sinh 2026")
                 .content("Dummy content")
@@ -769,7 +769,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 .department(departments.get("P.DTAO"))
                 .category(catQuyChe)
                 .confidentiality(DocumentConfidentiality.INTERNAL.getValue())
-                .status(DocumentStatus.APPROVED.getValue())
+                .status(DocumentStatus.PENDING.getValue())
                 .versionNumber(1)
                 .recipients(recipientIdsJson.apply(List.of("hieutruong@genifast.edu.vn", "chuyenvien.dtao@genifast.edu.vn")))
                 .createdBy("chuyenvien.dtao@genifast.edu.vn")
@@ -777,7 +777,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 .build();
         documentRepository.save(doc01);
 
-        // doc-02: PUBLIC + APPROVED, K.CNTT, Kế hoạch đào tạo, recipients [user-tk, user-gv]
+        // doc-02: PRIVATE + APPROVED, K.CNTT, Kế hoạch đào tạo, recipients [user-tk, user-gv]
         Document doc02 = Document.builder()
                 .title("Kế hoạch đào tạo ngành CNTT")
                 .content("Dummy content")
@@ -786,7 +786,8 @@ public class DatabaseInitializer implements CommandLineRunner {
                 .organization(organization)
                 .department(departments.get("K.CNTT"))
                 .category(catKeHoachDaoTao)
-                .confidentiality(DocumentConfidentiality.PUBLIC.getValue())
+                .confidentiality(DocumentConfidentiality.PRIVATE.getValue())
+                .accessType(4) // PRIVATE access type
                 .status(DocumentStatus.APPROVED.getValue())
                 .versionNumber(1)
                 .recipients(recipientIdsJson.apply(List.of("truongkhoa.cntt@genifast.edu.vn", "giaovu.cntt@genifast.edu.vn")))
@@ -875,6 +876,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 .department(departments.get("P.DTAO"))
                 .category(catDanhSach)
                 .confidentiality(DocumentConfidentiality.PRIVATE.getValue())
+                .accessType(4) // PRIVATE access type
                 .status(DocumentStatus.APPROVED.getValue())
                 .versionNumber(1)
                 .recipients(recipientIdsJson.apply(List.of("phophong.dtao@genifast.edu.vn")))
@@ -895,6 +897,34 @@ public class DatabaseInitializer implements CommandLineRunner {
                 log.info(">>> Seed private_docs: user-pp được phép truy cập doc-07 <<<");
             } catch (Exception ex) {
                 log.warn("Không thể seed private_docs cho doc-07 & user-pp: {}", ex.getMessage());
+            }
+        });
+
+        // Seed private_docs: cho phép creator và recipients truy cập doc-02 (PRIVATE)
+        userRepository.findByEmail("giaovu.cntt@genifast.edu.vn").ifPresent(creator -> {
+            try {
+                PrivateDoc pd = PrivateDoc.builder()
+                        .document(doc02)
+                        .user(creator)
+                        .status(1)
+                        .build();
+                privateDocRepository.save(pd);
+                log.info(">>> Seed private_docs: creator có thể truy cập doc-02 <<<");
+            } catch (Exception ex) {
+                log.warn("Không thể seed private_docs cho doc-02 & creator: {}", ex.getMessage());
+            }
+        });
+        userRepository.findByEmail("truongkhoa.cntt@genifast.edu.vn").ifPresent(recipient -> {
+            try {
+                PrivateDoc pd = PrivateDoc.builder()
+                        .document(doc02)
+                        .user(recipient)
+                        .status(1)
+                        .build();
+                privateDocRepository.save(pd);
+                log.info(">>> Seed private_docs: user-tk có thể truy cập doc-02 <<<");
+            } catch (Exception ex) {
+                log.warn("Không thể seed private_docs cho doc-02 & user-tk: {}", ex.getMessage());
             }
         });
 

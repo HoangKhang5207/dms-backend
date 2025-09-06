@@ -19,6 +19,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
+import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.reflect.MethodSignature;
 import org.springframework.stereotype.Component;
@@ -78,6 +79,43 @@ public class AuditLoggingAspect {
             CustomPermissionEvaluator.DELEGATOR_HOLDER.remove(); // Dọn dẹp sau khi dùng xong
         } catch (Exception e) {
             log.error("Error while auditing action: {}", e.getMessage(), e);
+        }
+    }
+
+    @AfterThrowing(pointcut = "@annotation(auditLog)", throwing = "exception")
+    public void logAfterThrowing(JoinPoint joinPoint, AuditLog auditLog, Exception exception) {
+        try {
+            Optional<String> currentUserEmailOpt = JwtUtils.getCurrentUserLogin();
+            if (currentUserEmailOpt.isEmpty()) {
+                log.warn("Cannot log audit action because user is not authenticated.");
+                return;
+            }
+
+            Optional<User> userOpt = userRepository.findByEmail(currentUserEmailOpt.get());
+            if (userOpt.isEmpty()) {
+                log.warn("Cannot log audit action because user {} not found in database.", currentUserEmailOpt.get());
+                return;
+            }
+
+            String originalAction = auditLog.action();
+            String failedAction = originalAction + "_FAILED";
+            Long documentId = findDocumentId(joinPoint);
+
+            // Create failure details
+            String details = createFailureMessage(joinPoint, originalAction, exception);
+
+            AuditLogRequest logRequest = AuditLogRequest.builder()
+                    .action(failedAction)
+                    .details(details)
+                    .documentId(documentId)
+                    .userId(userOpt.get().getId())
+                    .ipAddress(getClientIp())
+                    .sessionId(getSessionId())
+                    .build();
+
+            auditLogService.logAction(logRequest);
+        } catch (Exception e) {
+            log.error("Error while auditing failed action: {}", e.getMessage(), e);
         }
     }
 
@@ -228,6 +266,29 @@ public class AuditLoggingAspect {
         }
         return String.format("Thực thi phương thức %s với tham số: [%s].", joinPoint.getSignature().getName(),
                 joiner.toString());
+    }
+
+    private String createFailureMessage(JoinPoint joinPoint, String action, Exception exception) {
+        Object[] args = joinPoint.getArgs();
+
+        switch (action) {
+            case "SHARE_DOCUMENT":
+                if (args.length > 1 && args[1] instanceof DocumentShareRequest) {
+                    DocumentShareRequest req = (DocumentShareRequest) args[1];
+                    return String.format("Failed to share document ID %s with user ID %s: %s", 
+                            args[0], req.getRecipientId(), exception.getMessage());
+                }
+                return String.format("Failed to share document ID %s: %s", args[0], exception.getMessage());
+            
+            case "APPROVE_DOCUMENT":
+                return String.format("Failed to approve document ID %s: %s", args[0], exception.getMessage());
+            
+            case "READ_DOCUMENT":
+                return String.format("Failed to read document ID %s: %s", args[0], exception.getMessage());
+            
+            default:
+                return String.format("Failed to execute %s: %s", action, exception.getMessage());
+        }
     }
 
     // --- CÁC PHƯƠNG THỨC HELPER MỚI ---

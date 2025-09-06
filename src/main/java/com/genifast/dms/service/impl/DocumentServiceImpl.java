@@ -18,6 +18,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -276,10 +278,10 @@ public class DocumentServiceImpl implements DocumentService {
     public void shareDocument(Long id, DocumentShareRequest shareRequest) {
         log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng ID {}", id, shareRequest.getRecipientId());
 
-        Document document = findDocById(id);
-
-        // Current user (sharer)
+        // Check specific permissions first
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        
+        Document document = findDocById(id);
 
         // Only owner (uploader) can share their documents
         if (document.getCreatedBy() == null || !document.getCreatedBy().equals(currentUser.getEmail())) {
@@ -308,16 +310,25 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
+        // Check if current user has all requested permissions
+        for (String requestedPerm : incomingPerms) {
+            if (!validateSharePermission(currentUser, document, requestedPerm)) {
+                log.warn("User {} attempted to share with permission {} but doesn't have it", 
+                    currentUser.getEmail(), requestedPerm);
+                throw new ApiException(ErrorCode.ACCESS_DENIED, ErrorMessage.NO_PERMISSION.getMessage());
+            }
+        }
+
         // Load recipient & basic checks
         User recipient = userRepository.findById(recipientId)
-            .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, "Recipient not found"));
+            .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND, ErrorMessage.RECIPIENT_NOT_FOUND.getMessage()));
         if (recipient.getStatus() != null && recipient.getStatus() != 1) {
             throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not active.");
         }
 
         // Validate document status must be APPROVED
         if (document.getStatus() == null || !document.getStatus().equals(DocumentStatus.APPROVED.getValue())) {
-            throw new ApiException(ErrorCode.ACCESS_DENIED, "Document is not in APPROVED status.");
+            throw new ApiException(ErrorCode.ACCESS_DENIED, ErrorMessage.DOCUMENT_NOT_APPROVED_FOR_SHARING.getMessage());
         }
 
         // Determine actual scope by organization relationship
@@ -326,40 +337,52 @@ public class DocumentServiceImpl implements DocumentService {
         boolean requestedExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
         boolean actualExternal = !sameOrg;
 
-        // Enforce that request flag matches actual relationship
-        if (requestedExternal != actualExternal) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST,
-                "is_share_to_external does not match actual organization relationship between sharer and recipient");
+        // Check document access_type first to determine sharing rules
+        Integer accessType = document.getAccessType();
+        boolean isExternalDocument = accessType != null && accessType == 1; // EXTERNAL access_type
+        
+        // Auto-detect external sharing for EXTERNAL documents
+        if (isExternalDocument && actualExternal && !requestedExternal) {
+            requestedExternal = true; // Auto-set for EXTERNAL documents shared externally
+            log.info("Auto-detected external sharing for EXTERNAL document ID {} to external user {}", 
+                id, recipient.getEmail());
+        }
+        
+        // For EXTERNAL documents (access_type=1), external sharing is allowed based on document type (ABAC)
+        // No need to check user permissions since documents:share:external is purely ABAC
+        if (!isExternalDocument) {
+            // For non-EXTERNAL documents, enforce organization relationship matching
+            if (requestedExternal != actualExternal) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST,
+                    ErrorMessage.CANNOT_SHARE_INTERNAL_EXTERNALLY.getMessage());
+            }
         }
 
-        // Confidentiality suitability rules
-        Integer confidentiality = document.getConfidentiality();
-        if (Boolean.TRUE.equals(requestedExternal)) {
-            // External: only PUBLIC or EXTERNAL
-            if (confidentiality != null && !(confidentiality.equals(DocumentConfidentiality.PUBLIC.getValue())
-                    || confidentiality.equals(DocumentConfidentiality.EXTERNAL.getValue()))) {
+        // Access type suitability rules
+        if (requestedExternal) {
+            // External: only PUBLIC(2) or EXTERNAL(1)
+            if (accessType != null && !(accessType == 2 || accessType == 1)) {
                 throw new ApiException(ErrorCode.ACCESS_DENIED,
-                        "Document confidentiality not suitable for external sharing.");
+                        "Document access type not suitable for external sharing.");
             }
         } else {
-            // Internal: allow PUBLIC, INTERNAL, PROJECT; block EXTERNAL, and guard PRIVATE/LOCKED via private_docs
-            if (confidentiality != null && confidentiality.equals(DocumentConfidentiality.EXTERNAL.getValue())) {
+            // Internal: allow PUBLIC(2), INTERNAL(3); block EXTERNAL(1), and guard PRIVATE(4) via private_docs
+            if (accessType != null && accessType == 1) {
                 throw new ApiException(ErrorCode.ACCESS_DENIED,
-                        "Document confidentiality not suitable for internal sharing.");
+                        "Document access type not suitable for internal sharing.");
             }
         }
 
-        // PRIVATE or LOCKED require explicit authorization via private_docs; also disallow external for these
-        if (confidentiality != null && (confidentiality.equals(DocumentConfidentiality.PRIVATE.getValue())
-                || confidentiality.equals(DocumentConfidentiality.LOCKED.getValue()))) {
+        // PRIVATE access_type(4) requires explicit authorization via private_docs; also disallow external for these
+        if (accessType != null && accessType == 4) {
             if (requestedExternal) {
-                throw new ApiException(ErrorCode.ACCESS_DENIED, "Private/Locked document cannot be shared externally.");
+                throw new ApiException(ErrorCode.ACCESS_DENIED, "Private document cannot be shared externally.");
             }
             boolean recipientAuthorized = privateDocumentRepository
                 .findByUserAndDocumentAndStatus(recipient, document, 1)
                 .isPresent();
             if (!recipientAuthorized) {
-                throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not authorized for private/locked document.");
+                throw new ApiException(ErrorCode.ACCESS_DENIED, ErrorMessage.RECIPIENT_NOT_AUTHORIZED_PRIVATE.getMessage());
             }
         }
 
@@ -370,7 +393,23 @@ public class DocumentServiceImpl implements DocumentService {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "from_date and to_date must be provided together");
         }
         if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
-            throw new ApiException(ErrorCode.INVALID_REQUEST, "to_date must be after or equal to from_date");
+            throw new ApiException(ErrorCode.INVALID_REQUEST, ErrorMessage.INVALID_DATE_RANGE.getMessage());
+        }
+        
+        // If timebound sharing is requested, user must have timebound permission
+        if (fromDate != null && toDate != null) {
+            if (!validateSharePermission(currentUser, document, "documents:share:timebound")) {
+                log.warn("User {} attempted timebound sharing but doesn't have documents:share:timebound permission", 
+                    currentUser.getEmail());
+                throw new ApiException(ErrorCode.ACCESS_DENIED, ErrorMessage.NO_PERMISSION.getMessage());
+            }
+        }
+        
+        // PRIVATE documents require timebound sharing with specific dates
+        if (document.getAccessType() != null && document.getAccessType() == 4) {
+            if (fromDate == null || toDate == null) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, ErrorMessage.PRIVATE_DOCUMENT_REQUIRES_TIMEBOUND.getMessage());
+            }
         }
 
         // Build permissions to persist
@@ -383,9 +422,8 @@ public class DocumentServiceImpl implements DocumentService {
             }
         }
 
-        // Add scope permission based on is_share_to_external flag
-        boolean shareFlagExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
-        if (shareFlagExternal) {
+        // Add scope permission based on final requestedExternal value
+        if (requestedExternal) {
             if (!finalPerms.contains("documents:share:external")) {
                 finalPerms.add("documents:share:external");
             }
@@ -471,11 +509,10 @@ public class DocumentServiceImpl implements DocumentService {
         Document document = findDocById(id);
         authorizeUserCanAccessDocument(currentUser, document);
 
-        // Bổ sung ràng buộc: Không cho ký tài liệu PRIVATE/LOCKED
+        // Bổ sung ràng buộc: Không cho ký tài liệu PRIVATE access_type
         // Đơn giản hóa theo yêu cầu test hiện tại: mọi tài liệu PRIVATE đều bị chặn ký
         boolean isPrivateScope = (document.getAccessType() != null && document.getAccessType() == 4);
-        boolean isSensitiveConf = (document.getConfidentiality() != null && (document.getConfidentiality() == 3 || document.getConfidentiality() == 4));
-        if (isPrivateScope || isSensitiveConf) {
+        if (isPrivateScope) {
             boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().equals(currentUser.getEmail());
             boolean hasPrivateAccess = privateDocumentRepository.findByUserAndDocumentAndStatus(currentUser, document, 1).isPresent();
             if (true || (!isCreator && !hasPrivateAccess)) {
@@ -702,10 +739,10 @@ public class DocumentServiceImpl implements DocumentService {
         HttpServletRequest request = getCurrentRequest();
         String deviceType = request != null ? request.getHeader("Device-Type") : "UNKNOWN";
 
-        // Quy tắc ABAC theo Device Type: Tài liệu PRIVATE hoặc LOCKED chỉ được truy cập từ thiết bị COMPANY_DEVICE
-        log.info("Checking access for document ID: {} with confidentiality: {} and device type: {}", document.getId(), document.getConfidentiality(), deviceType);
-        if ((document.getConfidentiality() == 3 || document.getConfidentiality() == 4 || document.getConfidentiality() == 5) && !"COMPANY_DEVICE".equals(deviceType)) {
-            throw new ApiException(ErrorCode.ACCESS_DENIED, "Access denied from external device for private/locked document.");
+        // Quy tắc ABAC theo Device Type: Tài liệu PRIVATE access_type chỉ được truy cập từ thiết bị COMPANY_DEVICE
+        log.info("Checking access for document ID: {} with access_type: {} and device type: {}", document.getId(), document.getAccessType(), deviceType);
+        if (document.getAccessType() != null && document.getAccessType() == 4 && !"COMPANY_DEVICE".equals(deviceType)) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Access denied from external device for private document.");
         }
 
         // Cho phép override bằng bản ghi được chia sẻ (private_docs) CHO MỌI accessType
@@ -777,6 +814,102 @@ public class DocumentServiceImpl implements DocumentService {
         return documentRepository.findById(docId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND,
                         ErrorMessage.DOCUMENT_NOT_FOUND.getMessage()));
+    }
+
+    /**
+     * Validate share permission based on document access_type and user context
+     */
+    private boolean validateSharePermission(User user, Document document, String permission) {
+        // documents:share:external is purely ABAC - no validation needed here
+        // It's handled in the shareDocument method based on document access_type
+        if ("documents:share:external".equals(permission)) {
+            return true; // Always allow - ABAC logic is in shareDocument method
+        }
+        
+        // For other permissions, check RBAC first (JWT token)
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            boolean hasAuthority = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals(permission));
+            if (!hasAuthority) {
+                log.warn("User {} does not have authority {} in their JWT token", user.getEmail(), permission);
+                return false;
+            }
+        } else {
+            log.warn("No authentication context found for user {}", user.getEmail());
+            return false;
+        }
+
+        // Then check document-level constraints (ABAC)
+        switch (permission) {
+            case "documents:share:readonly":
+                // Check if user can access this document for reading
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+            
+            case "documents:share:forwardable":
+                // Check if document allows forwarding based on access_type
+                Integer accessType = document.getAccessType();
+                // PRIVATE(4) access type documents cannot be forwarded
+                if (accessType != null && accessType == 4) {
+                    log.warn("Document ID {} with access_type PRIVATE cannot be forwarded", document.getId());
+                    return false;
+                }
+                // User must have access to document to forward it
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+            
+            case "documents:share:shareable":
+                // Check if document is shareable based on access type
+                Integer docAccessType = document.getAccessType();
+                
+                // PRIVATE(4) access type documents have restricted sharing
+                if (docAccessType != null && docAccessType == 4) {
+                    // Only creator or explicitly authorized users can share private docs
+                    boolean isCreator = document.getCreatedBy() != null && 
+                        document.getCreatedBy().equals(user.getEmail());
+                    if (!isCreator) {
+                        boolean hasPrivateAccess = privateDocumentRepository
+                            .findByUserAndDocumentAndStatus(user, document, 1)
+                            .isPresent();
+                        if (!hasPrivateAccess) {
+                            log.warn("User {} cannot share PRIVATE document ID {} - not creator and no private access", 
+                                user.getEmail(), document.getId());
+                            return false;
+                        }
+                    }
+                }
+                
+                // User must have access to document to share it
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+            
+            case "documents:share:timebound":
+                // Timebound permission is used for time-limited sharing
+                // User must have access to document to set timebound sharing
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+            
+            default:
+                log.warn("Unknown permission: {}", permission);
+                return false;
+        }
     }
 
 }
