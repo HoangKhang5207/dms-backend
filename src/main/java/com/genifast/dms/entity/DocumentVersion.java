@@ -6,14 +6,18 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
+import org.hibernate.annotations.CreationTimestamp;
+
 import java.time.Instant;
 
-import com.genifast.dms.common.utils.JwtUtils;
-
 @Entity
-@Table(name = "document_versions", indexes = {
-        @Index(name = "idx_doc_version_number", columnList = "document_id, version_number", unique = true)
-})
+@Table(name = "document_versions",
+       uniqueConstraints = {
+           @UniqueConstraint(name = "uq_doc_versions_document_version", columnNames = {"document_id", "version_number"})
+       },
+       indexes = {
+           @Index(name = "idx_doc_version_number", columnList = "document_id, version_number")
+       })
 @Getter
 @Setter
 @NoArgsConstructor
@@ -26,6 +30,7 @@ public class DocumentVersion {
     private Long id;
 
     // Quan hệ nhiều-một với tài liệu gốc
+
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "document_id", nullable = false)
     private Document document;
@@ -38,6 +43,9 @@ public class DocumentVersion {
 
     @Column(columnDefinition = "TEXT")
     private String content;
+
+    @Column(name = "description", columnDefinition = "TEXT")
+    private String description;
 
     // Lưu lại trạng thái của tài liệu tại thời điểm tạo phiên bản
     @Column(name = "status", nullable = false)
@@ -54,13 +62,7 @@ public class DocumentVersion {
     @Column(name = "created_by", updatable = false)
     private String createdBy;
 
+    @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private Instant createdAt;
-
-    @PrePersist
-    protected void onCreate() {
-        createdAt = Instant.now();
-        createdBy = JwtUtils.getCurrentUserLogin().orElse("");
-    }
-
 }

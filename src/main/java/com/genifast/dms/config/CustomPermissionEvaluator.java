@@ -237,20 +237,21 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                 return isOrgManager || isDeptManagerForReport;
 
             case "documents:notify":
-                // Theo .docx: gửi thông báo khi phân phối/công khai, phụ thuộc vào type và
-                // recipients
-                boolean isDeptManagerForNotify = user.getIsDeptManager() != null && user.getIsDeptManager()
+                // ABAC: Ưu tiên Trưởng phòng; cho phép Quản lý tổ chức hoặc Admin trong cùng tổ chức
+                boolean isDeptManagerForNotify = Boolean.TRUE.equals(user.getIsDeptManager())
+                        && user.getDepartment() != null
                         && user.getDepartment().getId().equals(document.getDepartment().getId());
-                // Việc notify chỉ có ý nghĩa khi tài liệu là loại cần thông báo rộng rãi và có
-                // người nhận
+                boolean isOrgManagerForNotify = Boolean.TRUE.equals(user.getIsOrganizationManager())
+                        && user.getOrganization() != null
+                        && user.getOrganization().getId().equals(document.getOrganization().getId());
+                boolean isAdmin = Boolean.TRUE.equals(user.getIsAdmin());
+
+                // Thêm điều kiện document type từ main branch (nếu cần)
                 boolean isNotifiableType = (document.getDocumentType() == DocumentType.OUTGOING
                         || document.getDocumentType() == DocumentType.NOTICE);
-                return isDeptManagerForNotify && isNotifiableType && !document.getRecipients().isEmpty();
 
-            // Các quyền khác không có điều kiện ABAC phức tạp, nếu đã vượt qua
-            // RBAC/Delegation thì được phép.
-            default:
-                return true;
+                return (isDeptManagerForNotify || isOrgManagerForNotify || isAdmin) 
+                        && isNotifiableType && !document.getRecipients().isEmpty();
         }
 
         // Ưu tiên 4: Quyền truy cập cơ bản (cho các quyền không có logic lai)

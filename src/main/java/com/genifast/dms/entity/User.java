@@ -73,6 +73,12 @@ public class User {
     @Column(name = "last_login_at")
     private LocalDateTime lastLoginAt;
 
+    @Column(name = "current_device_id")
+    private String currentDeviceId;
+
+    @Column(name = "full_name")
+    private String fullName;
+
     @OneToMany(mappedBy = "user", fetch = FetchType.LAZY)
     @Builder.Default
     private Set<PrivateDoc> privateDocuments = new HashSet<>();
@@ -99,5 +105,22 @@ public class User {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
+    }
+
+    // Helper methods for ABAC
+    public Set<Role> getUserRoles() {
+        return this.roles != null ? this.roles : new HashSet<>();
+    }
+
+    public Long getOrganizationId() {
+        return this.organization != null ? this.organization.getId() : null;
+    }
+
+    public Long getDeptId() {
+        return this.department != null ? this.department.getId() : null;
+    }
+
+    public String getCurrentDeviceId() {
+        return this.currentDeviceId;
     }
 }

@@ -37,13 +37,15 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
         /**
          * Tìm tất cả user thuộc một tổ chức, có phân trang.
+         * Lưu ý: dùng nested property traversal với dấu gạch dưới.
          */
-        Page<User> findByOrganizationId(Long organizationId, Pageable pageable);
+        Page<User> findByOrganization_Id(Long organizationId, Pageable pageable);
 
         /**
          * Tìm tất cả user thuộc một phòng ban, có phân trang.
+         * Lưu ý: dùng nested property traversal với dấu gạch dưới.
          */
-        Page<User> findByDepartmentId(Long departmentId, Pageable pageable);
+        Page<User> findByDepartment_Id(Long departmentId, Pageable pageable);
 
         /**
          * Cập nhật trạng thái của user. Tương ứng UpdateUserStatus. [cite: 180]

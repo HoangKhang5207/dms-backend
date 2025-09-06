@@ -28,4 +28,8 @@ public class ProjectMember {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_role_id", nullable = false)
     private ProjectRole projectRole; // Thay thế cho isLeader
+
+    @Column(nullable = false)
+    @Builder.Default
+    private Integer status = 1;
 }

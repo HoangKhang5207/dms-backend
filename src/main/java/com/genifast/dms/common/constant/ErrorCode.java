@@ -44,6 +44,9 @@ public enum ErrorCode {
     INVALID_STATUS(400026, HttpStatus.BAD_REQUEST),
     USER_NO_PERMISSION(400027, HttpStatus.BAD_REQUEST),
 
+    // 403XXX - Forbidden
+    ACCESS_DENIED(403001, HttpStatus.FORBIDDEN),
+
     // document
     DOCUMENT_NOT_FOUND(400100, HttpStatus.BAD_REQUEST),
 

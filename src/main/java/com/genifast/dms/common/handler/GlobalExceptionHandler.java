@@ -43,6 +43,29 @@ public class GlobalExceptionHandler {
          */
         @ExceptionHandler(ApiException.class)
         public ResponseEntity<ErrorResponseDTO> handleApiException(ApiException ex, HttpServletRequest request) {
+                // Nếu là lỗi ACCESS_DENIED từ nghiệp vụ, ghi log tương tự nhánh AuthorizationDenied
+                try {
+                        if (ex.getErrorCode() != null && ex.getErrorCode().name().equals("ACCESS_DENIED")) {
+                                JwtUtils.getCurrentUserLogin().ifPresent(email -> {
+                                        Optional<User> userOpt = userRepository.findByEmail(email);
+                                        userOpt.ifPresent(user -> {
+                                                String action = "ACCESS_DENIED";
+                                                String details = String.format(
+                                                                "Thất bại: User '%s' đã bị từ chối truy cập tài nguyên tại '%s'. Lý do: %s",
+                                                                email, request.getRequestURI(), ex.getMessage());
+
+                                                AuditLogRequest logRequest = AuditLogRequest.builder()
+                                                                .action(action)
+                                                                .details(details)
+                                                                .userId(user.getId())
+                                                                .build();
+                                                auditLogService.logAction(logRequest);
+                                        });
+                                });
+                        }
+                } catch (Exception logEx) {
+                        log.warn("Cannot write audit log for ApiException ACCESS_DENIED: {}", logEx.getMessage());
+                }
                 ErrorResponseDTO errorResponse = ErrorResponseDTO.builder()
                                 .timestamp(LocalDateTime.now())
                                 .status(ex.getErrorCode().getServiceCode())
@@ -130,7 +153,7 @@ public class GlobalExceptionHandler {
                                 .timestamp(LocalDateTime.now())
                                 .status(HttpStatus.FORBIDDEN.value())
                                 .error(HttpStatus.FORBIDDEN.getReasonPhrase())
-                                .message("Bạn không có quyền truy cập hay thực hiện hành động này.")
+                                .message("Bạn không có quyền thực hiện hành động này.")
                                 .path(request.getRequestURI())
                                 .build();
                 return new ResponseEntity<>(errorResponse, HttpStatus.FORBIDDEN);

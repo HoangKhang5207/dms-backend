@@ -75,4 +75,7 @@ public interface DocumentRepository extends JpaRepository<Document, Long>, JpaSp
     List<Document> findAllByOrderByCreatedAtDesc();
 
     Optional<Document> findByFilePath(String filePath);
+
+    @Query("SELECT d FROM Document d LEFT JOIN FETCH d.category LEFT JOIN FETCH d.organization ORDER BY d.createdAt DESC")
+    List<Document> findAllWithCategoryAndOrganization();
 }
