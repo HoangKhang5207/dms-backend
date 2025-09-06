@@ -2,10 +2,13 @@ package com.genifast.dms.config;
 
 import com.genifast.dms.entity.Delegation;
 import com.genifast.dms.entity.Document;
+import com.genifast.dms.entity.DocumentVersion;
 import com.genifast.dms.entity.Project;
 import com.genifast.dms.entity.User;
+import com.genifast.dms.entity.enums.DocumentType;
 import com.genifast.dms.repository.DelegationRepository;
 import com.genifast.dms.repository.DocumentRepository;
+import com.genifast.dms.repository.DocumentVersionRepository;
 import com.genifast.dms.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.access.PermissionEvaluator;
@@ -24,6 +27,7 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
     private final DelegationRepository delegationRepository;
     private final UserRepository userRepository;
     private final DocumentRepository documentRepository;
+    private final DocumentVersionRepository documentVersionRepository;
 
     // Sử dụng ThreadLocal để lưu thông tin người ủy quyền trong phạm vi một request
     public static final ThreadLocal<User> DELEGATOR_HOLDER = new ThreadLocal<>();
@@ -142,6 +146,18 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
         if (document == null)
             return false;
 
+        // **BỔ SUNG: Xử lý quyền documents:version:read ngay từ đầu**
+        if (permission.startsWith("documents:version:read:")) {
+            try {
+                // Tách lấy version number từ chuỗi permission
+                Integer versionNumber = Integer.parseInt(permission.substring("documents:version:read:".length()));
+                return hasSpecificVersionPermission(user, documentId, versionNumber);
+            } catch (NumberFormatException e) {
+                // Nếu chuỗi permission không hợp lệ, từ chối quyền
+                return false;
+            }
+        }
+
         // Ưu tiên 1: Quyền trong Dự án
         if (document.getProject() != null) {
             boolean hasPermissionInProject = hasProjectPermission(user, document.getProject(), permission);
@@ -175,19 +191,49 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                 // ABAC: Trạng thái tài liệu phải là DRAFT (giả sử DRAFT = 1)
                 return document.getStatus() == 1;
 
+            case "documents:distribute":
+                // ABAC: Phải là Trưởng phòng VÀ tài liệu đã được duyệt
+                boolean isDeptManager = user.getIsDeptManager() != null && user.getIsDeptManager();
+                return isDeptManager && document.getStatus() == 3; // APPROVED
+
+            case "documents:publish":
+                // ABAC: Phải là Manager (tổ chức hoặc phòng ban) VÀ tài liệu là loại THONG_BAO
+                // VÀ đã duyệt
+                boolean isManager = (user.getIsOrganizationManager() != null && user.getIsOrganizationManager())
+                        || (user.getIsDeptManager() != null && user.getIsDeptManager());
+                return isManager && document.getDocumentType() == DocumentType.NOTICE && document.getStatus() == 3
+                        && document.getAccessType() == 1;
+
+            case "documents:track":
+                // ABAC: User là người nhận HOẶC thuộc phòng ban của tài liệu
+                boolean isRecipient = document.getRecipients().contains(user);
+                boolean isInDepartment = user.getDepartment() != null
+                        && user.getDepartment().getId().equals(document.getDepartment().getId());
+                return isRecipient || isInDepartment;
+
+            case "documents:forward":
+                // ABAC: User là người nhận và tài liệu đang ở trạng thái phù hợp (không phải
+                // DRAFT hoặc REJECTED)
+                boolean isRecipientForForward = document.getRecipients().contains(user);
+                boolean isStatusOk = document.getStatus() != 1 && document.getStatus() != 4; // Not DRAFT or REJECTED
+                return isRecipientForForward && isStatusOk;
+
             case "documents:export":
-                // ABAC: Trạng thái phải là APPROVED (giả sử = 3) VÀ user là manager của phòng
-                // ban đó
+                // ABAC: Trạng thái phải là APPROVED VÀ user là manager của phòng ban đó
                 boolean isDeptManagerForExport = user.getIsDeptManager() != null && user.getIsDeptManager()
                         && user.getDepartment().getId().equals(document.getDepartment().getId());
                 return document.getStatus() == 3 && isDeptManagerForExport;
 
             case "documents:report":
-                // ABAC: User phải là quản lý của phòng ban/tổ chức chứa tài liệu
+                // Theo .docx: có thể lọc theo department và type
+                // Logic ở đây là: user phải là manager và tài liệu phải thuộc loại có thể báo
+                // cáo (ví dụ không phải loại KHAC)
                 boolean isOrgManager = user.getIsOrganizationManager() != null && user.getIsOrganizationManager()
                         && user.getOrganization().getId().equals(document.getOrganization().getId());
                 boolean isDeptManagerForReport = user.getIsDeptManager() != null && user.getIsDeptManager()
                         && user.getDepartment().getId().equals(document.getDepartment().getId());
+                // Giả sử tất cả các loại tài liệu đều có thể báo cáo, việc lọc chi tiết sẽ do
+                // business logic ở service xử lý
                 return isOrgManager || isDeptManagerForReport;
 
             case "documents:notify":
@@ -199,28 +245,84 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                         && user.getOrganization() != null
                         && user.getOrganization().getId().equals(document.getOrganization().getId());
                 boolean isAdmin = Boolean.TRUE.equals(user.getIsAdmin());
-                return isDeptManagerForNotify || isOrgManagerForNotify || isAdmin;
+
+                // Thêm điều kiện document type từ main branch (nếu cần)
+                boolean isNotifiableType = (document.getDocumentType() == DocumentType.OUTGOING
+                        || document.getDocumentType() == DocumentType.NOTICE);
+
+                return (isDeptManagerForNotify || isOrgManagerForNotify || isAdmin) 
+                        && isNotifiableType && !document.getRecipients().isEmpty();
         }
 
         // Ưu tiên 4: Quyền truy cập cơ bản (cho các quyền không có logic lai)
-        if (permission.equals("documents:read")) {
-            switch (document.getAccessType()) {
-                case 1:
-                    return true; // Public
-                case 2:
-                    return user.getOrganization() != null
-                            && user.getOrganization().getId().equals(document.getOrganization().getId()); // Organization
-                case 3:
-                    return user.getDepartment() != null
-                            && user.getDepartment().getId().equals(document.getDepartment().getId()); // Department
-                case 4:
-                    return document.getCreatedBy().equals(user.getEmail()); // Private (chỉ người tạo)
-            }
-        }
+        // if (permission.equals("documents:read")) {
+        // switch (document.getAccessType()) {
+        // case 1:
+        // return true; // Public
+        // case 2:
+        // return user.getOrganization() != null
+        // && user.getOrganization().getId().equals(document.getOrganization().getId());
+        // // Organization
+        // case 3:
+        // return user.getDepartment() != null
+        // && user.getDepartment().getId().equals(document.getDepartment().getId()); //
+        // Department
+        // case 4:
+        // return document.getCreatedBy().equals(user.getEmail()); // Private (chỉ người
+        // tạo)
+        // }
+        // }
 
         // Mặc định: Nếu đã vượt qua kiểm tra RBAC/Delegation và không có điều kiện ABAC
         // đặc biệt nào, thì cho phép.
-        return true;
+        // return true;
+    }
+
+    /**
+     * BỔ SUNG: Phương thức mới chuyên để kiểm tra quyền trên một phiên bản cụ thể.
+     * Đây là nơi logic ABAC cho version được thực thi.
+     */
+    private boolean hasSpecificVersionPermission(User user, Long documentId, Integer versionNumber) {
+        // 1. Lấy thông tin phiên bản từ CSDL
+        Optional<DocumentVersion> versionOpt = documentVersionRepository.findByDocumentIdAndVersionNumber(documentId,
+                versionNumber);
+        if (versionOpt.isEmpty()) {
+            return false; // Phiên bản không tồn tại
+        }
+        DocumentVersion version = versionOpt.get();
+        Document document = version.getDocument();
+
+        // 2. Logic kiểm tra quyền truy cập cơ bản vào tài liệu gốc (quan trọng!)
+        // User phải có quyền truy cập cơ bản vào tài liệu thì mới được xét đến quyền
+        // xem phiên bản.
+        boolean canAccessDocument = switch (document.getAccessType()) {
+            case 1 -> true; // Public
+            case 2 -> user.getOrganization() != null
+                    && user.getOrganization().getId().equals(document.getOrganization().getId());
+            case 3 ->
+                user.getDepartment() != null && user.getDepartment().getId().equals(document.getDepartment().getId());
+            case 4 -> document.getCreatedBy().equals(user.getEmail()) || document.getRecipients().contains(user);
+            default -> false;
+        };
+
+        if (!canAccessDocument) {
+            return false;
+        }
+
+        // 3. Logic ABAC dựa trên thuộc tính của phiên bản
+        // Ví dụ: Một "Chuyên viên" chỉ được xem các phiên bản có status là DRAFT hoặc
+        // PENDING
+        // còn "Trưởng phòng" thì được xem cả phiên bản APPROVED.
+        boolean isManager = (user.getIsOrganizationManager() != null && user.getIsOrganizationManager())
+                || (user.getIsDeptManager() != null && user.getIsDeptManager());
+
+        if (isManager) {
+            return true; // Manager được xem tất cả các phiên bản của tài liệu họ có quyền truy cập.
+        } else {
+            // Nhân viên thông thường chỉ được xem các phiên bản chưa được duyệt (APPROVED)
+            // Giả sử: 1 = DRAFT, 2 = PENDING, 3 = APPROVED
+            return version.getStatus() < 3;
+        }
     }
 
     private boolean hasProjectPermission(User user, Project project, String permission) {

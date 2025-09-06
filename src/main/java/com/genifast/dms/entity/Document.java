@@ -5,6 +5,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import com.genifast.dms.common.utils.JwtUtils;
+import com.genifast.dms.entity.enums.DocumentType;
 
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
@@ -37,6 +38,15 @@ public class Document {
 
     @Column(name = "status")
     private Integer status;
+
+    // BỔ SUNG: Thêm trường để lưu số hiệu của phiên bản mới nhất
+    @Column(name = "latest_version", nullable = false)
+    @Builder.Default
+    private Integer latestVersion = 1;
+
+    @Enumerated(EnumType.STRING) // Lưu tên của Enum vào DB (e.g., "OUTGOING")
+    @Column(name = "document_type")
+    private DocumentType documentType;
 
     @Column(name = "created_by", length = 255)
     private String createdBy;
@@ -112,9 +122,9 @@ public class Document {
     @Column(name = "archived_at")
     private Instant archivedAt; // thời điểm lưu trữ
 
-    @Column(name = "confidentiality")
+    @Column(name = "access_type")
     @Builder.Default
-    private Integer confidentiality = 2; // Default: INTERNAL
+    private Integer accessType = 3; // Default: INTERNAL (access_type = 3)
 
     @Column(name = "recipients", columnDefinition = "TEXT")
     private String recipients; // JSON array chứa danh sách user IDs
@@ -130,9 +140,21 @@ public class Document {
     @JoinColumn(name = "signed_by")
     private User signedBy;
 
+    // BỔ SUNG: Quan hệ một-nhiều tới các phiên bản
+    @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @Builder.Default
+    private Set<DocumentVersion> versions = new HashSet<>();
+
     @OneToMany(mappedBy = "document", fetch = FetchType.LAZY)
     @Builder.Default
     private Set<PrivateDoc> privateDocuments = new HashSet<>();
+
+    // BỔ SUNG: Thêm quan hệ Many-to-Many để quản lý người nhận (recipients)
+    // Điều này sẽ tạo ra một bảng trung gian là `document_recipients`
+    @ManyToMany(fetch = FetchType.LAZY)
+    @JoinTable(name = "document_recipients", joinColumns = @JoinColumn(name = "document_id"), inverseJoinColumns = @JoinColumn(name = "user_id"))
+    @Builder.Default
+    private Set<User> recipients = new HashSet<>();
 
     @PrePersist
     protected void onCreate() {

@@ -43,7 +43,7 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasAuthority('organization:manage')") // Giả sử có quyền này cho Org Manager
+    @PreAuthorize("hasAuthority('project:manage')") // Giả sử có quyền này cho Org Manager
     public ProjectResponse createProject(ProjectCreateRequest createDto) {
         User currentUser = getCurrentUser();
         Organization org = currentUser.getOrganization();
@@ -152,7 +152,8 @@ public class ProjectServiceImpl implements ProjectService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#projectId, 'project', 'project:member:manage')")
+    // @PreAuthorize("hasPermission(#projectId, 'project',
+    // 'project:member:manage')")
     public ProjectResponse addMemberToProject(Long projectId, ProjectMemberRequest addDto) {
         Project project = findProjectById(projectId);
         User currentUser = getCurrentUser();

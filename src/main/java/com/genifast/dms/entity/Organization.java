@@ -13,6 +13,8 @@ import java.util.List;
 import java.util.Set;
 
 import com.genifast.dms.common.utils.JwtUtils;
+import com.genifast.dms.entity.bpmn.BpmnUpload;
+import com.genifast.dms.entity.workflow.Workflow;
 
 @Entity
 @Table(name = "organizations")
@@ -71,6 +73,14 @@ public class Organization {
 
     @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     private List<Department> departments;
+
+    @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private Set<BpmnUpload> bpmnUploads = new HashSet<>();
+
+    @OneToMany(mappedBy = "organization", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
+    private Set<Workflow> workflows = new HashSet<>();
 
     @PrePersist
     protected void onCreate() {

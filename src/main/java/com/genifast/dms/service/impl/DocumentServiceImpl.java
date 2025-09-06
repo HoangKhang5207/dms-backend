@@ -476,68 +476,80 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#id, 'document', 'documents:publish')")
     @AuditLog(action = "PUBLISH_DOCUMENT")
-    public void publishDocument(Long id) {
-        log.info(" nghiệp vụ công khai tài liệu ID: {}", id);
-        // TODO: Implement chi tiết logic công khai, thay đổi accessType thành PUBLIC
+    public DocumentResponse publishDocument(Long id) {
+        Document document = findDocById(id);
+        document.setAccessType(2); // 2 = PUBLIC (corrected from main branch)
+        document.setStatus(3); // Set status to APPROVED as well
+        Document publishedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been published by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(publishedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasAuthority('documents:archive')")
     @AuditLog(action = "ARCHIVE_DOCUMENT")
-    public void archiveDocument(Long id) {
-        log.info(" nghiệp vụ lưu trữ tài liệu ID: {}", id);
+    public DocumentResponse archiveDocument(Long id) {
         Document document = findDocById(id);
+
+        // Check if document is already archived
         if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
-            log.info("Document ID {} đã ở trạng thái ARCHIVED", id);
-            return;
+            log.info("Document ID {} is already in ARCHIVED status", id);
+            return documentMapper.toDocumentResponse(document);
         }
+
         document.setStatus(DocumentStatus.ARCHIVED.getValue());
         document.setArchivedAt(Instant.now());
-        documentRepository.save(document);
-        log.info("Đã lưu trữ document ID {} (status=ARCHIVED)", id);
+        Document archivedDoc = documentRepository.save(document);
+
+        log.info("Document ID {} has been archived by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(archivedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#id, 'document', 'documents:sign')")
     @AuditLog(action = "SIGN_DOCUMENT")
-    public void signDocument(Long id) {
-        log.info("Nghiệp vụ ký điện tử tài liệu ID: {}", id);
-        // Kiểm tra quyền truy cập thực tế theo ABAC trước khi ký
-        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+    public DocumentResponse signDocument(Long id) {
         Document document = findDocById(id);
-        authorizeUserCanAccessDocument(currentUser, document);
 
-        // Bổ sung ràng buộc: Không cho ký tài liệu PRIVATE access_type
-        // Đơn giản hóa theo yêu cầu test hiện tại: mọi tài liệu PRIVATE đều bị chặn ký
-        boolean isPrivateScope = (document.getAccessType() != null && document.getAccessType() == 4);
-        if (isPrivateScope) {
-            boolean isCreator = document.getCreatedBy() != null && document.getCreatedBy().equals(currentUser.getEmail());
-            boolean hasPrivateAccess = privateDocumentRepository.findByUserAndDocumentAndStatus(currentUser, document, 1).isPresent();
-            if (true || (!isCreator && !hasPrivateAccess)) {
-                throw new ApiException(ErrorCode.ACCESS_DENIED, "User not authorized for private document.");
-            }
-        }
-        // TODO: Tích hợp với dịch vụ ký số (digital signature)
+        // Set signing metadata
+        document.setSignedAt(Instant.now());
+        document.setSignedBy(findUserByEmail(JwtUtils.getCurrentUserLogin().orElse("")));
+
+        Document signedDoc = documentRepository.save(document);
+
+        log.info("Document ID {} has been signed by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(signedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#id, 'document', 'documents:lock')")
     @AuditLog(action = "LOCK_DOCUMENT")
-    public void lockDocument(Long id) {
-        log.info("Nghiệp vụ khóa tài liệu ID: {}", id);
-        // TODO: Thay đổi trạng thái tài liệu để ngăn chặn chỉnh sửa
+    public DocumentResponse lockDocument(Long id) {
+        Document document = findDocById(id);
+        document.setStatus(DocumentStatus.LOCKED.getValue()); // Use enum instead of magic number
+        Document lockedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been locked by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(lockedDoc);
     }
 
     @Override
     @Transactional
     @PreAuthorize("hasPermission(#id, 'document', 'documents:unlock')")
     @AuditLog(action = "UNLOCK_DOCUMENT")
-    public void unlockDocument(Long id) {
-        log.info("Nghiệp vụ mở khóa tài liệu ID: {}", id);
-        // TODO: Thay đổi trạng thái tài liệu để cho phép chỉnh sửa lại
+    public DocumentResponse unlockDocument(Long id) {
+        Document document = findDocById(id);
+
+        // Return to APPROVED status after unlocking
+        if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.LOCKED.getValue())) {
+            document.setStatus(DocumentStatus.APPROVED.getValue());
+        }
+
+        Document unlockedDoc = documentRepository.save(document);
+        log.info("Document ID {} has been unlocked by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(unlockedDoc);
     }
 
     @Override
@@ -553,17 +565,18 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasAuthority('documents:restore')")
     @AuditLog(action = "RESTORE_DOCUMENT")
-    public void restoreDocument(Long id) {
-        log.info("Nghiệp vụ khôi phục tài liệu ID: {} từ trạng thái lưu trữ", id);
+    public DocumentResponse restoreDocument(Long id) {
         Document document = findDocById(id);
-        if (document.getStatus() == null || !document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
-            log.info("Document ID {} không ở trạng thái ARCHIVED", id);
-            return;
+
+        // Only restore if document is archived
+        if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
+            document.setStatus(DocumentStatus.APPROVED.getValue()); // Restore to APPROVED
+            document.setArchivedAt(null); // Clear archived timestamp
         }
-        document.setStatus(DocumentStatus.DRAFT.getValue());
-        document.setArchivedAt(null);
-        documentRepository.save(document);
-        log.info("Đã khôi phục document ID {} (status=DRAFT)", id);
+
+        Document restoredDoc = documentRepository.save(document);
+        log.info("Document ID {} has been restored by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(restoredDoc);
     }
 
     @Override

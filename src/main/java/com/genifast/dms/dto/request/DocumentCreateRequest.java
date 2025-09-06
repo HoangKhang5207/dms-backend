@@ -19,6 +19,10 @@ public class DocumentCreateRequest {
     @NotNull(message = "Phạm vi truy cập không được để trống")
     private Integer accessType;
 
+    @JsonProperty("document_type")
+    @NotNull(message = "Loại tài liệu không được để trống")
+    private String documentType;
+
     @JsonProperty("total_page")
     private Integer totalPage;
 }

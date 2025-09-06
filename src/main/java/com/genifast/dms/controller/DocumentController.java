@@ -66,8 +66,8 @@ public class DocumentController {
     public ResponseEntity<DocumentResponse> createDocument(
             @RequestPart("metadata") String metadataJson,
             @RequestPart("file") MultipartFile file) {
-        DocumentResponse createdDocument = documentService.createDocument(metadataJson, file);
-        return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
+    DocumentResponse createdDocument = documentService.createDocument(metadataJson, file);
+    return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
     }
 
     @PostMapping(value = "/upload-multiple", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
@@ -79,7 +79,7 @@ public class DocumentController {
         List<Document> uploadedDocuments = fileStorageService.storeMultipleFiles(files, password, categoryId, accessType);
         return new ResponseEntity<>(uploadedDocuments, HttpStatus.CREATED);
     }
-
+  
     @GetMapping("/{id}")
     public ResponseEntity<DocumentResponse> getDocumentMetadata(@PathVariable Long id) {
         return ResponseEntity.ok(documentService.getDocumentMetadata(id));
@@ -335,25 +335,25 @@ public class DocumentController {
     public ResponseEntity<Map<String, String>> signDocument(
             @PathVariable("id") Long id,
             @RequestBody(required = false) DocumentSignRequest signRequest) {
-        
+
         // If body is provided, validate action and details
         if (signRequest != null) {
             String action = signRequest.getAction();
             String details = signRequest.getDetails();
-            
+
             if (action == null || action.trim().isEmpty()) {
                 throw new ApiException(ErrorCode.INVALID_REQUEST, "Action is required when body is provided");
             }
-            
+
             if (!"sign".equals(action) && !"stamp".equals(action)) {
                 throw new ApiException(ErrorCode.INVALID_REQUEST, "Invalid action. Must be 'sign' or 'stamp'");
             }
-            
+
             if (details == null || details.trim().isEmpty()) {
                 throw new ApiException(ErrorCode.INVALID_REQUEST, "Details is required for signing/stamping");
             }
         }
-        
+
         documentService.signDocument(id);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("message", "Tài liệu đã được ký thành công."));
@@ -379,10 +379,10 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/restore")
-    public ResponseEntity<Map<String, String>> restoreDocument(@PathVariable("id") Long id) {
-        documentService.restoreDocument(id);
-        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được khôi phục."));
-    }
+  public ResponseEntity<Map<String, String>> restoreDocument(@PathVariable("id") Long id) {
+      documentService.restoreDocument(id);
+      return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được khôi phục."));
+  }
 
     @GetMapping("/{id}/versions")
     public ResponseEntity<List<DocumentVersionResponse>> getDocumentVersions(@PathVariable("id") Long id) {
@@ -396,14 +396,15 @@ public class DocumentController {
     }
 
     @PostMapping("/{id}/notify")
-    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long id, @RequestBody String message) {
-        documentService.notifyRecipients(id, message);
+    public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long id,
+            @RequestBody Map<String, String> payload) {
+        documentService.notifyRecipients(id, payload.get("message"));
         return ResponseEntity.ok("Đã gửi thông báo tới những người liên quan.");
     }
 
     @GetMapping("/{id}/export")
     public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long id,
-            @RequestParam(defaultValue = "txt") String format) {
+            @RequestParam(defaultValue = "pdf") String format) {
         return documentService.exportDocument(id, format);
     }
 
