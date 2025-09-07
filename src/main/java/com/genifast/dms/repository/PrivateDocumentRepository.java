@@ -27,4 +27,9 @@ public interface PrivateDocumentRepository extends JpaRepository<PrivateDoc, Lon
      * @return Optional chứa bản ghi PrivateDocument nếu tồn tại
      */
     Optional<PrivateDoc> findByUserAndDocumentAndStatus(User user, Document document, int status);
+
+    /**
+     * Xóa tất cả các bản ghi PrivateDoc theo Document.
+     */
+    void deleteByDocument(Document document);
 }

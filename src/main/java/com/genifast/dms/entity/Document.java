@@ -87,6 +87,8 @@ public class Document {
     @Column(name = "access_type")
     private Integer accessType;
 
+    private Integer confidentiality;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "organization_id")
     private Organization organization;
@@ -98,7 +100,7 @@ public class Document {
     @Column(name = "title_unaccent", columnDefinition = "TEXT")
     private String titleUnaccent;
 
-    @Column(name = "password", length = 255)
+    @Column(name = "password", columnDefinition = "TEXT")
     private String password;
 
     @Column(name = "photo_id", columnDefinition = "TEXT")
@@ -119,7 +121,29 @@ public class Document {
     private Instant publicShareExpiryAt; // Thời gian hết hạn của link
 
     @Column(name = "allow_public_download")
+    @Builder.Default
     private boolean allowPublicDownload = false; // Mặc định không cho phép tải
+
+    @Column(name = "archived_at")
+    private Instant archivedAt; // thời điểm lưu trữ
+
+    // @Column(name = "access_type")
+    // @Builder.Default
+    // private Integer accessType = 3; // Default: INTERNAL (access_type = 3)
+
+    // @Column(name = "recipients", columnDefinition = "TEXT")
+    // private String recipients; // JSON array chứa danh sách user IDs
+
+    @Column(name = "version_number")
+    @Builder.Default
+    private Integer versionNumber = 1;
+
+    @Column(name = "signed_at")
+    private Instant signedAt;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "signed_by")
+    private User signedBy;
 
     // BỔ SUNG: Quan hệ một-nhiều tới các phiên bản
     @OneToMany(mappedBy = "document", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
@@ -147,6 +171,27 @@ public class Document {
     @PreUpdate
     protected void onUpdate() {
         updatedAt = Instant.now();
+    }
+
+    // Helper methods for ABAC
+    // public String getRecipients() {
+    // return this.recipients;
+    // }
+
+    public Integer getConfidentiality() {
+        return this.confidentiality;
+    }
+
+    public Long getOrganizationId() {
+        return this.organization != null ? this.organization.getId() : null;
+    }
+
+    public Long getDeptId() {
+        return this.department != null ? this.department.getId() : null;
+    }
+
+    public Long getProjectId() {
+        return this.project != null ? this.project.getId() : null;
     }
 
 }

@@ -3,7 +3,12 @@ package com.genifast.dms.service.impl;
 import java.io.IOException;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.UUID;
 
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
@@ -14,18 +19,23 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+
 import com.genifast.dms.aop.AuditLog;
 import com.genifast.dms.common.constant.ErrorCode;
 import com.genifast.dms.common.constant.ErrorMessage;
-import com.genifast.dms.common.constant.FileSizeFormatter;
 import com.genifast.dms.common.exception.ApiException;
 import com.genifast.dms.common.service.EmailService;
+import com.genifast.dms.common.constant.FileSizeFormatter;
 import com.genifast.dms.common.utils.JwtUtils;
 import com.genifast.dms.dto.request.DocumentCommentRequest;
 import com.genifast.dms.dto.request.DocumentCreateRequest;
@@ -41,11 +51,15 @@ import com.genifast.dms.entity.Document;
 import com.genifast.dms.entity.DocumentVersion;
 import com.genifast.dms.entity.User;
 import com.genifast.dms.entity.enums.DocumentType;
+import com.genifast.dms.entity.DocumentPermission;
+import com.genifast.dms.entity.enums.DocumentStatus;
+import com.genifast.dms.entity.enums.DocumentConfidentiality;
 import com.genifast.dms.mapper.DocumentMapper;
 import com.genifast.dms.mapper.DocumentVersionMapper;
 import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
+import com.genifast.dms.repository.DocumentPermissionRepository;
 import com.genifast.dms.repository.DocumentVersionRepository;
 import com.genifast.dms.repository.PrivateDocumentRepository;
 import com.genifast.dms.repository.UserRepository;
@@ -66,6 +80,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final DepartmentRepository departmentRepository;
     private final CategoryRepository categoryRepository;
     private final PrivateDocumentRepository privateDocumentRepository;
+    private final DocumentPermissionRepository documentPermissionRepository;
     private final FileStorageService fileStorageService;
     private final DocumentMapper documentMapper;
     private final DocumentVersionMapper documentVersionMapper;
@@ -105,7 +120,7 @@ public class DocumentServiceImpl implements DocumentService {
                 .category(category)
                 .department(category.getDepartment())
                 .organization(category.getOrganization())
-                .status(1) // Trạng thái ban đầu: DRAFT
+                .status(DocumentStatus.DRAFT.getValue()) // Trạng thái ban đầu: DRAFT
                 .accessType(createDto.getAccessType())
                 .filePath(filePath) // Vẫn lưu file path của phiên bản mới nhất để truy cập nhanh
                 .fileId(category.getDepartment().getName() + "/" + category.getName())
@@ -139,9 +154,9 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @PreAuthorize("hasAuthority('documents:read')")
     @AuditLog(action = "READ_DOCUMENT")
-    public DocumentResponse getDocumentMetadata(Long docId) {
+    public DocumentResponse getDocumentMetadata(Long id) {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
-        Document document = findDocById(docId);
+        Document document = findDocById(id);
         authorizeUserCanAccessDocument(currentUser, document);
         return documentMapper.toDocumentResponse(document);
     }
@@ -149,9 +164,9 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @PreAuthorize("hasAuthority('documents:download')")
     @AuditLog(action = "DOWNLOAD_DOCUMENT")
-    public ResponseEntity<Resource> downloadDocumentFile(Long docId) {
+    public ResponseEntity<Resource> downloadDocumentFile(Long id) {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
-        Document document = findDocById(docId);
+        Document document = findDocById(id);
         authorizeUserCanAccessDocument(currentUser, document);
 
         Resource resource = fileStorageService.loadAsResource(document.getFilePath());
@@ -164,13 +179,11 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:update')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:update')")
     @AuditLog(action = "UPDATE_DOCUMENT")
-    public DocumentResponse updateDocumentMetadata(Long docId, DocumentUpdateRequest updateDto) {
+    public DocumentResponse updateDocumentMetadata(Long id, DocumentUpdateRequest updateDto) {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
-        Document document = findDocById(docId);
-
-        // Logic kiểm tra quyền chỉnh sửa vẫn giữ nguyên
+        Document document = findDocById(id);
         authorizeUserCanEditDocument(currentUser, document);
 
         // **LOGIC VERSIONING MỚI**
@@ -204,24 +217,40 @@ public class DocumentServiceImpl implements DocumentService {
         document.getVersions().add(newVersion);
 
         Document updatedDoc = documentRepository.save(document);
-        log.info("Document ID {} updated to version {} by {}", docId, newVersionNumber, currentUser.getEmail());
+        log.info("Document ID {} metadata updated by {}", id, currentUser.getEmail());
         return documentMapper.toDocumentResponse(updatedDoc);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:delete')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:delete')")
     @AuditLog(action = "DELETE_DOCUMENT")
-    public void deleteDocument(Long docId) {
-        Document document = findDocById(docId);
+    public void deleteDocument(Long id) {
+        log.info("Nghiệp vụ xóa tài liệu ID: {}", id);
+        // 1) Tìm document theo ID (throw nếu không tồn tại)
+        Document document = findDocById(id);
 
-        // Implement soft delete
-        document.setStatus(0); // 0 = INACTIVE/DELETED
-        documentRepository.save(document);
+        // 2) Xóa các bản ghi phân quyền riêng tư liên quan (nếu có)
+        try {
+            privateDocumentRepository.deleteByDocument(document);
+        } catch (Exception ex) {
+            log.warn("Không thể xóa PrivateDoc liên quan đến document ID {}: {}", id, ex.getMessage());
+        }
 
-        log.warn("Document ID {} has been soft-deleted by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
-        // Lưu ý: File vật lý vẫn còn, có thể viết một scheduled job để xóa file sau một
-        // thời gian nhất định.
+        // 3) Xóa file vật lý nếu có fileId
+        String fileId = document.getFileId();
+        if (fileId != null && !fileId.isEmpty()) {
+            try {
+                fileStorageService.deleteFileById(fileId);
+            } catch (Exception ex) {
+                // Không chặn việc xóa Document nếu xóa file vật lý thất bại
+                log.warn("Xóa file vật lý thất bại cho document ID {} (fileId={}): {}", id, fileId, ex.getMessage());
+            }
+        }
+
+        // 4) Xóa bản ghi Document
+        documentRepository.delete(document);
+        log.info("Đã xóa document ID {} khỏi cơ sở dữ liệu", id);
     }
 
     @Override
@@ -258,7 +287,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:approve')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:approve')")
     @AuditLog(action = "APPROVE_DOCUMENT")
     public DocumentResponse approveDocument(Long docId) {
         Document document = findDocById(docId);
@@ -269,7 +298,7 @@ public class DocumentServiceImpl implements DocumentService {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "Tài liệu không ở trạng thái chờ phê duyệt.");
         }
 
-        document.setStatus(3); // 3 = APPROVED
+        document.setStatus(DocumentStatus.APPROVED.getValue()); // 3 = APPROVED
         Document approvedDoc = documentRepository.save(document);
         log.info("Document ID {} has been approved by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
 
@@ -287,7 +316,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:reject')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:reject')")
     @AuditLog(action = "REJECT_DOCUMENT")
     public DocumentResponse rejectDocument(Long docId, String reason) {
         Document document = findDocById(docId);
@@ -301,7 +330,7 @@ public class DocumentServiceImpl implements DocumentService {
             throw new ApiException(ErrorCode.INVALID_REQUEST, "Lý do từ chối là bắt buộc.");
         }
 
-        document.setStatus(4); // 4 = REJECTED
+        document.setStatus(DocumentStatus.REJECTED.getValue()); // 4 = REJECTED
         // Bổ sung: Lưu lại lý do từ chối. Cần thêm một trường vào Document entity, ví
         // dụ: rejectReason
         document.setRejectReason(reason);
@@ -324,11 +353,188 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:share:readonly') or hasPermission(#docId, 'document', 'documents:share:forwardable') or hasPermission(#docId, 'document', 'documents:share:timebound') or hasPermission(#docId, 'document', 'documents:share:orgscope')")
+    @PreAuthorize("isAuthenticated()")
     @AuditLog(action = "SHARE_DOCUMENT")
-    public void shareDocument(Long docId, DocumentShareRequest shareRequest) {
-        log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng {}", docId, shareRequest.getRecipientEmail());
-        // TODO: Implement logic chia sẻ, tạo bản ghi trong bảng private_docs
+    public void shareDocument(Long id, DocumentShareRequest shareRequest) {
+        log.info(" nghiệp vụ chia sẻ tài liệu ID: {} với người dùng ID {}", id, shareRequest.getRecipientId());
+
+        // Check specific permissions first
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+
+        Document document = findDocById(id);
+
+        // Only owner (uploader) can share their documents
+        if (document.getCreatedBy() == null || !document.getCreatedBy().equals(currentUser.getEmail())) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Only the owner can share this document.");
+        }
+
+        // Validate recipient is required (by ID only)
+        Long recipientId = shareRequest.getRecipientId();
+        if (recipientId == null) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "recipient_id is required");
+        }
+
+        // Validate permissions: must be present and only allowed base permissions
+        List<String> basePerms = List.of(
+                "documents:share:readonly",
+                "documents:share:forwardable",
+                "documents:share:shareable");
+        List<String> incomingPerms = shareRequest.getPermissions();
+        if (incomingPerms == null || incomingPerms.isEmpty()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "permissions is required and must not be empty");
+        }
+        for (String p : incomingPerms) {
+            if (!basePerms.contains(p)) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "permissions contains unsupported value: " + p);
+            }
+        }
+
+        // Check if current user has all requested permissions
+        for (String requestedPerm : incomingPerms) {
+            if (!validateSharePermission(currentUser, document, requestedPerm)) {
+                log.warn("User {} attempted to share with permission {} but doesn't have it",
+                        currentUser.getEmail(), requestedPerm);
+                throw new ApiException(ErrorCode.ACCESS_DENIED, ErrorMessage.NO_PERMISSION.getMessage());
+            }
+        }
+
+        // Load recipient & basic checks
+        User recipient = userRepository.findById(recipientId)
+                .orElseThrow(() -> new ApiException(ErrorCode.USER_NOT_FOUND,
+                        ErrorMessage.RECIPIENT_NOT_FOUND.getMessage()));
+        if (recipient.getStatus() != null && recipient.getStatus() != 1) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Recipient not active.");
+        }
+
+        // Validate document status must be APPROVED
+        if (document.getStatus() == null || !document.getStatus().equals(DocumentStatus.APPROVED.getValue())) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED,
+                    ErrorMessage.DOCUMENT_NOT_APPROVED_FOR_SHARING.getMessage());
+        }
+
+        // Determine actual scope by organization relationship
+        boolean sameOrg = currentUser.getOrganization() != null && recipient.getOrganization() != null
+                && currentUser.getOrganization().getId().equals(recipient.getOrganization().getId());
+        boolean requestedExternal = Boolean.TRUE.equals(shareRequest.getIsShareToExternal());
+        boolean actualExternal = !sameOrg;
+
+        // Check document access_type first to determine sharing rules
+        Integer accessType = document.getAccessType();
+        boolean isExternalDocument = accessType != null && accessType == 1; // EXTERNAL access_type
+
+        // Auto-detect external sharing for EXTERNAL documents
+        if (isExternalDocument && actualExternal && !requestedExternal) {
+            requestedExternal = true; // Auto-set for EXTERNAL documents shared externally
+            log.info("Auto-detected external sharing for EXTERNAL document ID {} to external user {}",
+                    id, recipient.getEmail());
+        }
+
+        // For EXTERNAL documents (access_type=1), external sharing is allowed based on
+        // document type (ABAC)
+        // No need to check user permissions since documents:share:external is purely
+        // ABAC
+        if (!isExternalDocument) {
+            // For non-EXTERNAL documents, enforce organization relationship matching
+            if (requestedExternal != actualExternal) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST,
+                        ErrorMessage.CANNOT_SHARE_INTERNAL_EXTERNALLY.getMessage());
+            }
+        }
+
+        // Access type suitability rules
+        if (requestedExternal) {
+            // External: only PUBLIC(2) or EXTERNAL(1)
+            if (accessType != null && !(accessType == 2 || accessType == 1)) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED,
+                        "Document access type not suitable for external sharing.");
+            }
+        } else {
+            // Internal: allow PUBLIC(2), INTERNAL(3); block EXTERNAL(1), and guard
+            // PRIVATE(4) via private_docs
+            if (accessType != null && accessType == 1) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED,
+                        "Document access type not suitable for internal sharing.");
+            }
+        }
+
+        // PRIVATE access_type(4) requires explicit authorization via private_docs; also
+        // disallow external for these
+        if (accessType != null && accessType == 4) {
+            if (requestedExternal) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED, "Private document cannot be shared externally.");
+            }
+            boolean recipientAuthorized = privateDocumentRepository
+                    .findByUserAndDocumentAndStatus(recipient, document, 1)
+                    .isPresent();
+            if (!recipientAuthorized) {
+                throw new ApiException(ErrorCode.ACCESS_DENIED,
+                        ErrorMessage.RECIPIENT_NOT_AUTHORIZED_PRIVATE.getMessage());
+            }
+        }
+
+        // Validate timebound inputs
+        Instant toDate = shareRequest.getToDate();
+        Instant fromDate = shareRequest.getFromDate();
+        if ((fromDate == null) ^ (toDate == null)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "from_date and to_date must be provided together");
+        }
+        if (fromDate != null && toDate != null && toDate.isBefore(fromDate)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, ErrorMessage.INVALID_DATE_RANGE.getMessage());
+        }
+
+        // If timebound sharing is requested, user must have timebound permission
+        if (fromDate != null && toDate != null) {
+            if (!validateSharePermission(currentUser, document, "documents:share:timebound")) {
+                log.warn("User {} attempted timebound sharing but doesn't have documents:share:timebound permission",
+                        currentUser.getEmail());
+                throw new ApiException(ErrorCode.ACCESS_DENIED, ErrorMessage.NO_PERMISSION.getMessage());
+            }
+        }
+
+        // PRIVATE documents require timebound sharing with specific dates
+        if (document.getAccessType() != null && document.getAccessType() == 4) {
+            if (fromDate == null || toDate == null) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST,
+                        ErrorMessage.PRIVATE_DOCUMENT_REQUIRES_TIMEBOUND.getMessage());
+            }
+        }
+
+        // Build permissions to persist
+        List<String> finalPerms = new ArrayList<>(incomingPerms);
+
+        // Auto-add timebound only when both from/to provided
+        if (fromDate != null && toDate != null) {
+            if (!finalPerms.contains("documents:share:timebound")) {
+                finalPerms.add("documents:share:timebound");
+            }
+        }
+
+        // Add scope permission based on final requestedExternal value
+        if (requestedExternal) {
+            if (!finalPerms.contains("documents:share:external")) {
+                finalPerms.add("documents:share:external");
+            }
+        } else {
+            if (!finalPerms.contains("documents:share:orgscope")) {
+                finalPerms.add("documents:share:orgscope");
+            }
+        }
+
+        // Replace existing permissions for this recipient & document to avoid
+        // duplicates
+        documentPermissionRepository.deleteByUserIdAndDocId(recipientId, id);
+
+        // Persist one row per permission
+        for (String perm : finalPerms) {
+            DocumentPermission dp = DocumentPermission.builder()
+                    .userId(recipientId)
+                    .docId(id)
+                    .permission(perm)
+                    .versionNumber(document.getVersionNumber())
+                    .expiryDate((fromDate != null && toDate != null) ? toDate : null)
+                    .build();
+            documentPermissionRepository.save(dp);
+        }
     }
 
     @Override
@@ -345,7 +551,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:submit')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:submit')")
     @AuditLog(action = "SUBMIT_DOCUMENT")
     public DocumentResponse submitDocument(Long docId) {
         Document document = findDocById(docId);
@@ -357,7 +563,7 @@ public class DocumentServiceImpl implements DocumentService {
                     "Chỉ có thể trình duyệt tài liệu ở trạng thái bản nháp (Draft).");
         }
 
-        document.setStatus(2); // 2 = PENDING
+        document.setStatus(DocumentStatus.PENDING.getValue()); // 2 = PENDING
         Document submittedDoc = documentRepository.save(document);
         log.info("Document ID {} has been submitted for approval by {}", docId,
                 JwtUtils.getCurrentUserLogin().orElse(""));
@@ -384,7 +590,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:publish')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:publish')")
     @AuditLog(action = "PUBLISH_DOCUMENT")
     public DocumentResponse publishDocument(Long docId) {
         Document document = findDocById(docId);
@@ -409,56 +615,73 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:archive')")
     @AuditLog(action = "ARCHIVE_DOCUMENT")
-    public DocumentResponse archiveDocument(Long docId) {
-        Document document = findDocById(docId);
-        document.setStatus(5); // 5 = ARCHIVED
+    public DocumentResponse archiveDocument(Long id) {
+        Document document = findDocById(id);
+
+        // Check if document is already archived
+        if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
+            log.info("Document ID {} is already in ARCHIVED status", id);
+            return documentMapper.toDocumentResponse(document);
+        }
+
+        document.setStatus(DocumentStatus.ARCHIVED.getValue());
+        document.setArchivedAt(Instant.now());
         Document archivedDoc = documentRepository.save(document);
-        log.info("Document ID {} has been archived by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+
+        log.info("Document ID {} has been archived by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
         return documentMapper.toDocumentResponse(archivedDoc);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:sign')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:sign')")
     @AuditLog(action = "SIGN_DOCUMENT")
-    public DocumentResponse signDocument(Long docId) {
-        Document document = findDocById(docId);
-        // Trong thực tế, logic này sẽ tích hợp với một dịch vụ chữ ký số.
-        // Ở đây, chúng ta chỉ ghi log hành động.
-        log.info("Document ID {} has been signed by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
-        // Có thể thêm một trường isSigned (boolean) vào entity Document nếu cần
-        return documentMapper.toDocumentResponse(document);
+    public DocumentResponse signDocument(Long id) {
+        Document document = findDocById(id);
+
+        // Set signing metadata
+        document.setSignedAt(Instant.now());
+        document.setSignedBy(findUserByEmail(JwtUtils.getCurrentUserLogin().orElse("")));
+
+        Document signedDoc = documentRepository.save(document);
+
+        log.info("Document ID {} has been signed by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
+        return documentMapper.toDocumentResponse(signedDoc);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:lock')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:lock')")
     @AuditLog(action = "LOCK_DOCUMENT")
-    public DocumentResponse lockDocument(Long docId) {
-        Document document = findDocById(docId);
-        document.setStatus(6); // 6 = LOCKED
+    public DocumentResponse lockDocument(Long id) {
+        Document document = findDocById(id);
+        document.setStatus(DocumentStatus.LOCKED.getValue());
         Document lockedDoc = documentRepository.save(document);
-        log.info("Document ID {} has been locked by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        log.info("Document ID {} has been locked by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
         return documentMapper.toDocumentResponse(lockedDoc);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:unlock')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:unlock')")
     @AuditLog(action = "UNLOCK_DOCUMENT")
-    public DocumentResponse unlockDocument(Long docId) {
-        Document document = findDocById(docId);
-        if (document.getStatus() == 6) { // Chỉ mở khóa khi đang bị khóa
-            document.setStatus(3); // Trở về trạng thái APPROVED
+
+    public DocumentResponse unlockDocument(Long id) {
+        Document document = findDocById(id);
+
+        // Return to APPROVED status after unlocking
+        if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.LOCKED.getValue())) {
+            document.setStatus(DocumentStatus.APPROVED.getValue());
         }
+
         Document unlockedDoc = documentRepository.save(document);
-        log.info("Document ID {} has been unlocked by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        log.info("Document ID {} has been unlocked by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
         return documentMapper.toDocumentResponse(unlockedDoc);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:comment')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:comment')")
     @AuditLog(action = "ADD_COMMENT")
     public void addComment(Long docId, DocumentCommentRequest commentRequest) {
         // TODO: Implement logic tạo và lưu entity Comment liên kết với Document và User
@@ -469,47 +692,75 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:restore')")
     @AuditLog(action = "RESTORE_DOCUMENT")
-    public DocumentResponse restoreDocument(Long docId) {
-        Document document = findDocById(docId);
-        if (document.getStatus() == 5) { // Chỉ khôi phục khi đang bị lưu trữ
-            document.setStatus(3); // Trở về trạng thái APPROVED
+    public DocumentResponse restoreDocument(Long id) {
+        Document document = findDocById(id);
+
+        // Only restore if document is archived
+        if (document.getStatus() != null && document.getStatus().equals(DocumentStatus.ARCHIVED.getValue())) {
+            document.setStatus(DocumentStatus.APPROVED.getValue()); // Restore to APPROVED
+            document.setArchivedAt(null); // Clear archived timestamp
         }
+
         Document restoredDoc = documentRepository.save(document);
-        log.info("Document ID {} has been restored by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        log.info("Document ID {} has been restored by {}", id, JwtUtils.getCurrentUserLogin().orElse(""));
         return documentMapper.toDocumentResponse(restoredDoc);
     }
 
     @Override
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:history')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:history')")
     @AuditLog(action = "VIEW_HISTORY")
-    public List<DocumentVersionResponse> getDocumentVersions(Long docId) {
-        // Kiểm tra tài liệu có tồn tại không
-        if (!documentRepository.existsById(docId)) {
-            throw new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, ErrorMessage.DOCUMENT_NOT_FOUND.getMessage());
+    public List<DocumentVersionResponse> getDocumentVersions(Long id) {
+        log.info("Nghiệp vụ xem lịch sử các phiên bản của tài liệu ID: {}", id);
+        Document document = findDocById(id);
+        if (documentVersionRepository == null) {
+            log.warn("DocumentVersionRepository chưa được tiêm. Trả danh sách rỗng cho getDocumentVersions.");
+            return Collections.emptyList();
         }
+        List<DocumentVersion> versions = documentVersionRepository
+                .findByDocumentIdOrderByVersionNumberDesc(document.getId());
+        // return versions.stream().map(v -> {
+        // DocumentVersionResponse resp = new DocumentVersionResponse();
+        // resp.setDocumentId(document.getId());
+        // resp.setVersionNumber(v.getVersionNumber());
+        // resp.setTitle(v.getTitle());
+        // resp.setDescription(v.getDescription());
+        // resp.setCreatedBy(v.getCreatedBy());
+        // resp.setCreatedAt(v.getCreatedAt());
+        // return resp;
+        // }).toList();
 
-        // Lấy tất cả phiên bản và sắp xếp theo version giảm dần
-        List<DocumentVersion> versions = documentVersionRepository.findByDocumentIdOrderByVersionNumberDesc(docId);
-
-        log.info("Lấy lịch sử các phiên bản của tài liệu ID: {}", docId);
         return documentVersionMapper.toResponseList(versions);
     }
 
     @Override
-    // Chúng ta sẽ truyền versionNumber vào trong chuỗi permission để
-    // CustomPermissionEvaluator xử lý
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:version:read:' + #versionNumber)")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:version:read')")
     @AuditLog(action = "VIEW_SPECIFIC_VERSION")
-    public DocumentVersionResponse getSpecificDocumentVersion(Long docId, Integer versionNumber) {
-        DocumentVersion version = documentVersionRepository.findByDocumentIdAndVersionNumber(docId, versionNumber)
-                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "Phiên bản tài liệu không tồn tại."));
+    public DocumentVersionResponse getSpecificDocumentVersion(Long id, Integer versionNumber) {
+        log.info("Nghiệp vụ xem phiên bản cụ thể số {} của tài liệu ID: {}", versionNumber, id);
+        Document document = findDocById(id);
+        // Kiểm tra quyền truy cập tổng thể vào tài liệu
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        authorizeUserCanAccessDocument(currentUser, document);
 
-        log.info("Xem phiên bản cụ thể số {} của tài liệu ID: {}", versionNumber, docId);
+        if (documentVersionRepository == null) {
+            throw new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "Document version repository not available.");
+        }
+        DocumentVersion version = documentVersionRepository
+                .findByDocumentIdAndVersionNumber(document.getId(), versionNumber)
+                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "Document version not found."));
+
+        // DocumentVersionResponse resp = new DocumentVersionResponse();
+        // resp.setDocumentId(document.getId());
+        // resp.setVersionNumber(version.getVersionNumber());
+        // resp.setTitle(version.getTitle());
+        // resp.setDescription(version.getDescription());
+        // resp.setCreatedBy(version.getCreatedBy());
+        // resp.setCreatedAt(version.getCreatedAt());
         return documentVersionMapper.toResponse(version);
     }
 
     @Override
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:notify')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:notify')")
     @AuditLog(action = "NOTIFY_RECIPIENTS")
     public void notifyRecipients(Long docId, String message) {
         Document document = findDocById(docId);
@@ -530,12 +781,12 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:export')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:export')")
     @AuditLog(action = "EXPORT_DOCUMENT")
-    public ResponseEntity<Resource> exportDocument(Long docId, String format) {
-        log.info("Exporting document ID: {} to format: {}", docId, format);
+    public ResponseEntity<Resource> exportDocument(Long id, String format) {
+        log.info("Exporting document ID: {} to format: {}", id, format);
         // Logic này có thể rất phức tạp, ở đây ta giả lập việc export ra file text
-        Document document = findDocById(docId);
+        Document document = findDocById(id);
         String content = "DOCUMENT EXPORT\n" +
                 "ID: " + document.getId() + "\n" +
                 "Title: " + document.getTitle() + "\n" +
@@ -552,7 +803,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:forward')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:forward')")
     @AuditLog(action = "FORWARD_DOCUMENT")
     public void forwardDocument(Long docId, String recipientEmail) {
         Document document = findDocById(docId);
@@ -585,7 +836,7 @@ public class DocumentServiceImpl implements DocumentService {
 
     @Override
     @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:distribute')")
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:distribute')")
     @AuditLog(action = "DISTRIBUTE_DOCUMENT")
     public void distributeDocument(Long docId, List<Long> departmentIds) {
         if (departmentIds == null || departmentIds.isEmpty()) {
@@ -656,36 +907,52 @@ public class DocumentServiceImpl implements DocumentService {
                 .body(resource);
     }
 
-    // @Override
-    // @Transactional
-    // @PreAuthorize("hasPermission(#docId, 'document',
-    // 'documents:share:external')")
-    // @AuditLog(action = "SHARE_DOCUMENT")
-    // public String createShareLink(Long docId, Instant expiryAt, boolean
-    // allowDownload) {
-    // User currentUser =
-    // findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
-    // Document document = findDocById(docId);
+    @Override
+    @Transactional
+    @PreAuthorize("hasPermission(#id, 'document', 'documents:share:external')")
+    @AuditLog(action = "SHARE_DOCUMENT")
+    public String createShareLink(Long id, Instant expiryAt, boolean allowDownload) {
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        Document document = findDocById(id);
 
-    // // Người dùng phải có quyền truy cập vào tài liệu này mới được chia sẻ
-    // authorizeUserCanAccessDocument(currentUser, document);
+        // Người dùng phải có quyền truy cập vào tài liệu này mới được chia sẻ
+        authorizeUserCanAccessDocument(currentUser, document);
 
-    // // Tạo token ngẫu nhiên
-    // String token = UUID.randomUUID().toString();
-    // document.setShareToken(token);
-    // document.setPublicShareExpiryAt(expiryAt);
-    // document.setAllowPublicDownload(allowDownload);
+        // Tạo token ngẫu nhiên
+        String token = UUID.randomUUID().toString();
+        document.setShareToken(token);
+        document.setPublicShareExpiryAt(expiryAt);
+        document.setAllowPublicDownload(allowDownload);
 
-    // documentRepository.save(document);
-    // log.info("User {} created a share link for document ID {}",
-    // currentUser.getEmail(), docId);
+        documentRepository.save(document);
+        log.info("User {} created a share link for document ID {}",
+                currentUser.getEmail(), id);
 
-    // // Trả về URL đầy đủ để hiển thị cho người dùng
-    // return baseUrlForSharedDocuments + token;
-    // }
+        // Trả về URL đầy đủ để hiển thị cho người dùng
+        return baseUrlForSharedDocuments + token;
+    }
 
     // ------ Helper Method ------
     private void authorizeUserCanAccessDocument(User user, Document document) {
+        // Lấy thông tin thiết bị từ request header
+        HttpServletRequest request = getCurrentRequest();
+        String deviceType = request != null ? request.getHeader("Device-Type") : "UNKNOWN";
+
+        // Quy tắc ABAC theo Device Type: Tài liệu PRIVATE access_type chỉ được truy cập
+        // từ thiết bị COMPANY_DEVICE
+        log.info("Checking access for document ID: {} with access_type: {} and device type: {}", document.getId(),
+                document.getAccessType(), deviceType);
+        if (document.getAccessType() != null && document.getAccessType() == 4 && !"COMPANY_DEVICE".equals(deviceType)) {
+            throw new ApiException(ErrorCode.ACCESS_DENIED, "Access denied from external device for private document.");
+        }
+
+        // Cho phép override bằng bản ghi được chia sẻ (private_docs) CHO MỌI accessType
+        // Điều này phục vụ tình huống 8.2: tài liệu phòng ban được chia sẻ cho người ở
+        // phòng ban khác
+        if (privateDocumentRepository.findByUserAndDocumentAndStatus(user, document, 1).isPresent()) {
+            return;
+        }
+
         switch (document.getAccessType()) {
             case 1: // Public
                 return;
@@ -700,13 +967,23 @@ public class DocumentServiceImpl implements DocumentService {
                     return;
                 break;
             case 4: // Private
-                if (document.getCreatedBy().equals(user.getEmail()))
+                // Cho phép quản lý tổ chức đọc tài liệu PRIVATE nếu truy cập từ thiết bị công
+                // ty
+                if (Boolean.TRUE.equals(user.getIsOrganizationManager()))
                     return;
-                if (privateDocumentRepository.findByUserAndDocumentAndStatus(user, document, 1).isPresent())
+                if (document.getCreatedBy().equals(user.getEmail()))
                     return;
                 break;
         }
-        throw new ApiException(ErrorCode.USER_NO_PERMISSION, "User does not have permission to access this document.");
+        throw new ApiException(ErrorCode.ACCESS_DENIED, "User does not have permission to access this document.");
+    }
+
+    // Helper method to get current HttpServletRequest
+    private HttpServletRequest getCurrentRequest() {
+        if (RequestContextHolder.getRequestAttributes() instanceof ServletRequestAttributes) {
+            return ((ServletRequestAttributes) RequestContextHolder.getRequestAttributes()).getRequest();
+        }
+        return null;
     }
 
     private void authorizeUserCanEditDocument(User user, Document document) {
@@ -742,6 +1019,102 @@ public class DocumentServiceImpl implements DocumentService {
         return documentRepository.findById(docId)
                 .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND,
                         ErrorMessage.DOCUMENT_NOT_FOUND.getMessage()));
+    }
+
+    /**
+     * Validate share permission based on document access_type and user context
+     */
+    private boolean validateSharePermission(User user, Document document, String permission) {
+        // documents:share:external is purely ABAC - no validation needed here
+        // It's handled in the shareDocument method based on document access_type
+        if ("documents:share:external".equals(permission)) {
+            return true; // Always allow - ABAC logic is in shareDocument method
+        }
+
+        // For other permissions, check RBAC first (JWT token)
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null) {
+            boolean hasAuthority = authentication.getAuthorities().stream()
+                    .anyMatch(authority -> authority.getAuthority().equals(permission));
+            if (!hasAuthority) {
+                log.warn("User {} does not have authority {} in their JWT token", user.getEmail(), permission);
+                return false;
+            }
+        } else {
+            log.warn("No authentication context found for user {}", user.getEmail());
+            return false;
+        }
+
+        // Then check document-level constraints (ABAC)
+        switch (permission) {
+            case "documents:share:readonly":
+                // Check if user can access this document for reading
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+
+            case "documents:share:forwardable":
+                // Check if document allows forwarding based on access_type
+                Integer accessType = document.getAccessType();
+                // PRIVATE(4) access type documents cannot be forwarded
+                if (accessType != null && accessType == 4) {
+                    log.warn("Document ID {} with access_type PRIVATE cannot be forwarded", document.getId());
+                    return false;
+                }
+                // User must have access to document to forward it
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+
+            case "documents:share:shareable":
+                // Check if document is shareable based on access type
+                Integer docAccessType = document.getAccessType();
+
+                // PRIVATE(4) access type documents have restricted sharing
+                if (docAccessType != null && docAccessType == 4) {
+                    // Only creator or explicitly authorized users can share private docs
+                    boolean isCreator = document.getCreatedBy() != null &&
+                            document.getCreatedBy().equals(user.getEmail());
+                    if (!isCreator) {
+                        boolean hasPrivateAccess = privateDocumentRepository
+                                .findByUserAndDocumentAndStatus(user, document, 1)
+                                .isPresent();
+                        if (!hasPrivateAccess) {
+                            log.warn("User {} cannot share PRIVATE document ID {} - not creator and no private access",
+                                    user.getEmail(), document.getId());
+                            return false;
+                        }
+                    }
+                }
+
+                // User must have access to document to share it
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+
+            case "documents:share:timebound":
+                // Timebound permission is used for time-limited sharing
+                // User must have access to document to set timebound sharing
+                try {
+                    authorizeUserCanAccessDocument(user, document);
+                    return true;
+                } catch (Exception e) {
+                    return false;
+                }
+
+            default:
+                log.warn("Unknown permission: {}", permission);
+                return false;
+        }
     }
 
 }

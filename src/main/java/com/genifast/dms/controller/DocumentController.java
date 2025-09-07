@@ -1,5 +1,6 @@
 package com.genifast.dms.controller;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -28,14 +29,23 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.genifast.dms.common.constant.ErrorCode;
+import com.genifast.dms.common.exception.ApiException;
 import com.genifast.dms.dto.request.DocumentCommentRequest;
 import com.genifast.dms.dto.request.DocumentFilterRequest;
+import com.genifast.dms.dto.request.DocumentReviewRequest;
 import com.genifast.dms.dto.request.DocumentShareRequest;
+import com.genifast.dms.dto.request.DocumentSignRequest;
 import com.genifast.dms.dto.request.DocumentUpdateRequest;
 import com.genifast.dms.dto.request.SearchAndOrNotRequest;
 import com.genifast.dms.dto.response.DocumentResponse;
+import com.genifast.dms.dto.response.DocumentAllResponse;
+import com.genifast.dms.dto.response.CategoryBriefResponse;
+import com.genifast.dms.dto.response.OrganizationBriefResponse;
 import com.genifast.dms.dto.response.DocumentVersionResponse;
 import com.genifast.dms.entity.Document;
+import com.genifast.dms.entity.Category;
+import com.genifast.dms.entity.Organization;
 import com.genifast.dms.service.DocumentService;
 import com.genifast.dms.service.FileStorageService;
 import com.genifast.dms.service.util.WatermarkService;
@@ -56,20 +66,20 @@ public class DocumentController {
     public ResponseEntity<DocumentResponse> createDocument(
             @RequestPart("metadata") String metadataJson,
             @RequestPart("file") MultipartFile file) {
-
         DocumentResponse createdDocument = documentService.createDocument(metadataJson, file);
         return new ResponseEntity<>(createdDocument, HttpStatus.CREATED);
     }
 
-    // @PostMapping(value = "/upload-multiple", consumes = {
-    // MediaType.MULTIPART_FORM_DATA_VALUE })
-    // public ResponseEntity<List<Document>> uploadMultipleFiles(
-    // @RequestPart("files") MultipartFile[] files,
-    // @RequestParam(required = false) String password) throws Exception {
-    // List<Document> uploadedDocuments =
-    // fileStorageService.storeMultipleFiles(files, password);
-    // return new ResponseEntity<>(uploadedDocuments, HttpStatus.CREATED);
-    // }
+    @PostMapping(value = "/upload-multiple", consumes = { MediaType.MULTIPART_FORM_DATA_VALUE })
+    public ResponseEntity<List<Document>> uploadMultipleFiles(
+            @RequestPart("files") MultipartFile[] files,
+            @RequestParam(required = false) String password,
+            @RequestParam Long categoryId,
+            @RequestParam(required = false) Integer accessType) throws Exception {
+        List<Document> uploadedDocuments = fileStorageService.storeMultipleFiles(files, password, categoryId,
+                accessType);
+        return new ResponseEntity<>(uploadedDocuments, HttpStatus.CREATED);
+    }
 
     @GetMapping("/{id}")
     public ResponseEntity<DocumentResponse> getDocumentMetadata(@PathVariable Long id) {
@@ -104,9 +114,9 @@ public class DocumentController {
         return ResponseEntity.ok(documentService.updateDocumentMetadata(id, updateDto));
     }
 
-    @DeleteMapping("/{id}")
-    public ResponseEntity<Void> deleteDocument(@PathVariable("id") Long docId) {
-        documentService.deleteDocument(docId);
+    @DeleteMapping("/{id:\\d+}")
+    public ResponseEntity<Void> deleteDocument(@PathVariable("id") Long id) {
+        documentService.deleteDocument(id);
         return ResponseEntity.noContent().build();
     }
 
@@ -146,15 +156,12 @@ public class DocumentController {
     }
 
     @GetMapping("/all")
-    public ResponseEntity<List<Document>> getAllDocuments() {
+    public ResponseEntity<List<DocumentAllResponse>> getAllDocuments() {
         List<Document> documents = fileStorageService.getAllDocuments();
-        return ResponseEntity.ok(documents);
-    }
-
-    @DeleteMapping("/{fileId}")
-    public ResponseEntity<Void> deleteFile(@PathVariable String fileId) throws Exception {
-        fileStorageService.deleteFileById(fileId);
-        return ResponseEntity.noContent().build();
+        List<DocumentAllResponse> result = documents.stream()
+                .map(this::toDocumentAllResponse)
+                .toList();
+        return ResponseEntity.ok(result);
     }
 
     @PostMapping("/check-local-watermark")
@@ -201,6 +208,44 @@ public class DocumentController {
         }
     }
 
+    private DocumentAllResponse toDocumentAllResponse(Document d) {
+        Category category = d.getCategory();
+        Organization org = d.getOrganization();
+
+        CategoryBriefResponse catDto = null;
+        if (category != null) {
+            catDto = new CategoryBriefResponse(
+                    category.getId(),
+                    category.getName(),
+                    category.getDescription());
+        }
+
+        OrganizationBriefResponse orgDto = null;
+        if (org != null) {
+            orgDto = new OrganizationBriefResponse(
+                    org.getId(),
+                    org.getName(),
+                    org.getDescription(),
+                    org.getStatus(),
+                    org.getCreatedAt(),
+                    org.getUpdatedAt());
+        }
+
+        DocumentAllResponse dto = new DocumentAllResponse();
+        dto.setId(d.getId());
+        dto.setTitle(d.getTitle());
+        dto.setContent(d.getContent());
+        dto.setStatus(d.getStatus());
+        dto.setType(d.getType());
+        dto.setAccessType(d.getAccessType());
+        dto.setOriginalFilename(d.getOriginalFilename());
+        dto.setCreatedAt(d.getCreatedAt());
+        dto.setUpdatedAt(d.getUpdatedAt());
+        dto.setCategory(catDto);
+        dto.setOrganization(orgDto);
+        return dto;
+    }
+
     @PostMapping("/validate-password")
     public ResponseEntity<Boolean> validatePassword(@RequestBody Map<String, String> payload) {
         String fileId = payload.get("fileId");
@@ -214,89 +259,144 @@ public class DocumentController {
     }
 
     @DeleteMapping("/delete-multiple")
-    public ResponseEntity<Void> deleteMultipleFiles(@RequestBody List<String> fileIds) throws Exception {
-        fileStorageService.deleteMultipleFilesByIds(fileIds);
+    public ResponseEntity<Void> deleteMultipleFiles(@RequestBody List<Long> ids) {
+        if (ids != null) {
+            for (Long id : ids) {
+                if (id != null) {
+                    documentService.deleteDocument(id);
+                }
+            }
+        }
         return ResponseEntity.noContent().build();
     }
 
     // ==========Bổ sung các endpoint giả định cho DMS - các hành động quản lý tài
     // liệu==========
+    @PostMapping("/{id}/review")
+    public ResponseEntity<DocumentResponse> reviewDocument(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody DocumentReviewRequest reviewRequest) {
+
+        if ("approve".equals(reviewRequest.getAction())) {
+            return ResponseEntity.ok(documentService.approveDocument(id));
+        } else if ("reject".equals(reviewRequest.getAction())) {
+            String reason = reviewRequest.getReason();
+            if (reason == null || reason.trim().isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Reason is required for reject action");
+            }
+            return ResponseEntity.ok(documentService.rejectDocument(id, reason));
+        } else {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Invalid action. Must be 'approve' or 'reject'");
+        }
+    }
+
     @PostMapping("/{id}/approve")
-    public ResponseEntity<DocumentResponse> approveDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.approveDocument(docId));
+    public ResponseEntity<DocumentResponse> approveDocument(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(documentService.approveDocument(id));
     }
 
     @PostMapping("/{id}/reject")
-    public ResponseEntity<DocumentResponse> rejectDocument(@PathVariable("id") Long docId,
+    public ResponseEntity<DocumentResponse> rejectDocument(@PathVariable("id") Long id,
             @RequestParam String reason) {
-        return ResponseEntity.ok(documentService.rejectDocument(docId, reason));
+        return ResponseEntity.ok(documentService.rejectDocument(id, reason));
     }
 
     @PostMapping("/{id}/share")
-    public ResponseEntity<String> shareDocument(@PathVariable("id") Long docId,
+    public ResponseEntity<Map<String, String>> shareDocument(@PathVariable("id") Long id,
             @Valid @RequestBody DocumentShareRequest shareRequest) {
-        documentService.shareDocument(docId, shareRequest);
-        return ResponseEntity.ok("Tài liệu đã được chia sẻ thành công.");
+        documentService.shareDocument(id, shareRequest);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Tài liệu đã được chia sẻ thành công."));
     }
 
     @GetMapping("/{id}/track")
-    public ResponseEntity<String> trackDocument(@PathVariable("id") Long docId) {
-        documentService.trackDocumentHistory(docId);
+    public ResponseEntity<String> trackDocument(@PathVariable("id") Long id) {
+        documentService.trackDocumentHistory(id);
         // Trong thực tế, endpoint này sẽ gọi AuditLogController để lấy dữ liệu
         return ResponseEntity.ok("Hành động theo dõi đã được ghi lại. Xem chi tiết trong Audit Logs.");
     }
 
     @PostMapping("/{id}/submit")
-    public ResponseEntity<DocumentResponse> submitDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.submitDocument(docId));
+    public ResponseEntity<DocumentResponse> submitDocument(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(documentService.submitDocument(id));
     }
 
     @PostMapping("/{id}/publish")
-    public ResponseEntity<DocumentResponse> publishDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.publishDocument(docId));
+    public ResponseEntity<Map<String, String>> publishDocument(@PathVariable("id") Long id) {
+        documentService.publishDocument(id);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Tài liệu đã được công khai thành công."));
     }
 
     @PostMapping("/{id}/archive")
-    public ResponseEntity<DocumentResponse> archiveDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.archiveDocument(docId));
+    public ResponseEntity<Map<String, String>> archiveDocument(@PathVariable("id") Long id) {
+        documentService.archiveDocument(id);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Tài liệu đã được lưu trữ thành công."));
     }
 
     @PostMapping("/{id}/sign")
-    public ResponseEntity<DocumentResponse> signDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.signDocument(docId));
+    public ResponseEntity<Map<String, String>> signDocument(
+            @PathVariable("id") Long id,
+            @RequestBody(required = false) DocumentSignRequest signRequest) {
+
+        // If body is provided, validate action and details
+        if (signRequest != null) {
+            String action = signRequest.getAction();
+            String details = signRequest.getDetails();
+
+            if (action == null || action.trim().isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Action is required when body is provided");
+            }
+
+            if (!"sign".equals(action) && !"stamp".equals(action)) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Invalid action. Must be 'sign' or 'stamp'");
+            }
+
+            if (details == null || details.trim().isEmpty()) {
+                throw new ApiException(ErrorCode.INVALID_REQUEST, "Details is required for signing/stamping");
+            }
+        }
+
+        documentService.signDocument(id);
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("message", "Tài liệu đã được ký thành công."));
     }
 
     @PostMapping("/{id}/lock")
-    public ResponseEntity<DocumentResponse> lockDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.lockDocument(docId));
+    public ResponseEntity<Map<String, String>> lockDocument(@PathVariable("id") Long id) {
+        documentService.lockDocument(id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được khóa."));
     }
 
     @PostMapping("/{id}/unlock")
-    public ResponseEntity<DocumentResponse> unlockDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.unlockDocument(docId));
+    public ResponseEntity<Map<String, String>> unlockDocument(@PathVariable("id") Long id) {
+        documentService.unlockDocument(id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được mở khóa."));
     }
 
     @PostMapping("/{id}/comments")
-    public ResponseEntity<String> addComment(@PathVariable("id") Long docId,
+    public ResponseEntity<String> addComment(@PathVariable("id") Long id,
             @Valid @RequestBody DocumentCommentRequest commentRequest) {
-        documentService.addComment(docId, commentRequest);
+        documentService.addComment(id, commentRequest);
         return ResponseEntity.status(HttpStatus.CREATED).body("Bình luận đã được thêm.");
     }
 
     @PostMapping("/{id}/restore")
-    public ResponseEntity<DocumentResponse> restoreDocument(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.restoreDocument(docId));
+    public ResponseEntity<Map<String, String>> restoreDocument(@PathVariable("id") Long id) {
+        documentService.restoreDocument(id);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("message", "Tài liệu đã được khôi phục."));
     }
 
     @GetMapping("/{id}/versions")
-    public ResponseEntity<List<DocumentVersionResponse>> getDocumentVersions(@PathVariable("id") Long docId) {
-        return ResponseEntity.ok(documentService.getDocumentVersions(docId));
+    public ResponseEntity<List<DocumentVersionResponse>> getDocumentVersions(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(documentService.getDocumentVersions(id));
     }
 
     @GetMapping("/{id}/versions/{versionNumber}")
-    public ResponseEntity<DocumentVersionResponse> getSpecificDocumentVersion(@PathVariable("id") Long docId,
+    public ResponseEntity<DocumentVersionResponse> getSpecificDocumentVersion(@PathVariable("id") Long id,
             @PathVariable Integer versionNumber) {
-        return ResponseEntity.ok(documentService.getSpecificDocumentVersion(docId, versionNumber));
+        return ResponseEntity.ok(documentService.getSpecificDocumentVersion(id, versionNumber));
     }
 
     @PostMapping("/{id}/notify")
@@ -307,21 +407,21 @@ public class DocumentController {
     }
 
     @GetMapping("/{id}/export")
-    public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long docId,
+    public ResponseEntity<Resource> exportDocument(@PathVariable("id") Long id,
             @RequestParam(defaultValue = "pdf") String format) {
-        return documentService.exportDocument(docId, format);
+        return documentService.exportDocument(id, format);
     }
 
     @PostMapping("/{id}/forward")
-    public ResponseEntity<String> forwardDocument(@PathVariable("id") Long docId, @RequestParam String recipientEmail) {
-        documentService.forwardDocument(docId, recipientEmail);
+    public ResponseEntity<String> forwardDocument(@PathVariable("id") Long id, @RequestParam String recipientEmail) {
+        documentService.forwardDocument(id, recipientEmail);
         return ResponseEntity.ok("Tài liệu đã được chuyển tiếp thành công.");
     }
 
     @PostMapping("/{id}/distribute")
-    public ResponseEntity<String> distributeDocument(@PathVariable("id") Long docId,
+    public ResponseEntity<String> distributeDocument(@PathVariable("id") Long id,
             @RequestBody List<Long> departmentIds) {
-        documentService.distributeDocument(docId, departmentIds);
+        documentService.distributeDocument(id, departmentIds);
         return ResponseEntity.ok("Tài liệu đã được phân phối.");
     }
 
@@ -332,12 +432,11 @@ public class DocumentController {
     }
 
     // Bổ sung cho Visitor - tạo liên kết chia sẻ công khai
-    // @PostMapping("/{id}/share-public")
-    // public ResponseEntity<String> createShareLink(@PathVariable("id") Long docId,
-    // @RequestParam Instant expiryAt,
-    // @RequestParam(defaultValue = "false") boolean allowDownload) {
-    // String link = documentService.createShareLink(docId, expiryAt,
-    // allowDownload);
-    // return ResponseEntity.ok(link);
-    // }
+    @PostMapping("/{id}/share-public")
+    public ResponseEntity<Map<String, String>> createShareLink(@PathVariable("id") Long id,
+            @RequestParam Instant expiryAt,
+            @RequestParam(defaultValue = "false") boolean allowDownload) {
+        String link = documentService.createShareLink(id, expiryAt, allowDownload);
+        return ResponseEntity.status(HttpStatus.CREATED).body(Map.of("link", link));
+    }
 }

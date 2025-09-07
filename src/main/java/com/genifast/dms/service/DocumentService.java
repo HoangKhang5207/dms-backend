@@ -18,57 +18,85 @@ import com.genifast.dms.dto.response.DocumentResponse;
 import com.genifast.dms.dto.response.DocumentVersionResponse;
 
 public interface DocumentService {
+
+    // Tạo tài liệu mới từ metadata JSON và file upload
     DocumentResponse createDocument(String metadataJson, MultipartFile file);
 
-    DocumentResponse getDocumentMetadata(Long docId);
+    // Lấy metadata của tài liệu theo ID
+    DocumentResponse getDocumentMetadata(Long id);
 
-    ResponseEntity<Resource> downloadDocumentFile(Long docId);
+    // Tải xuống file tài liệu
+    ResponseEntity<Resource> downloadDocumentFile(Long id);
 
-    DocumentResponse updateDocumentMetadata(Long docId, DocumentUpdateRequest updateDto);
+    // Cập nhật metadata của tài liệu
+    DocumentResponse updateDocumentMetadata(Long id, DocumentUpdateRequest updateDto);
 
-    void deleteDocument(Long docId);
+    // Xóa tài liệu
+    void deleteDocument(Long id);
 
+    // Lọc tài liệu theo các tiêu chí
     Page<DocumentResponse> filterDocuments(DocumentFilterRequest filterDto, Pageable pageable);
 
+    // Tìm kiếm tài liệu với điều kiện AND/OR/NOT
     Page<DocumentResponse> searchDocuments(SearchAndOrNotRequest searchDto, Pageable pageable);
 
-    DocumentResponse approveDocument(Long docId);
+    // Phê duyệt tài liệu
+    DocumentResponse approveDocument(Long id);
 
-    DocumentResponse rejectDocument(Long docId, String reason); // Thêm lý do từ chối
+    // Từ chối tài liệu với lý do
+    DocumentResponse rejectDocument(Long id, String reason);
 
-    void shareDocument(Long docId, DocumentShareRequest shareRequest);
+    // Chia sẻ tài liệu
+    void shareDocument(Long id, DocumentShareRequest shareRequest);
 
-    void trackDocumentHistory(Long docId); // Để lấy lịch sử cho audit:log
+    // Theo dõi lịch sử tài liệu cho audit log
+    void trackDocumentHistory(Long id);
 
-    DocumentResponse submitDocument(Long docId);
+    // Gửi tài liệu để xét duyệt
+    DocumentResponse submitDocument(Long id);
 
-    DocumentResponse publishDocument(Long docId);
+    // Công khai tài liệu
+    DocumentResponse publishDocument(Long id);
 
-    DocumentResponse archiveDocument(Long docId);
+    // Lưu trữ tài liệu
+    DocumentResponse archiveDocument(Long id);
 
-    DocumentResponse signDocument(Long docId);
+    // Ký tài liệu
+    DocumentResponse signDocument(Long id);
 
-    DocumentResponse lockDocument(Long docId);
+    // Khóa tài liệu
+    DocumentResponse lockDocument(Long id);
 
-    DocumentResponse unlockDocument(Long docId);
+    // Mở khóa tài liệu
+    DocumentResponse unlockDocument(Long id);
 
-    void addComment(Long docId, DocumentCommentRequest commentRequest);
+    // Thêm bình luận vào tài liệu
+    void addComment(Long id, DocumentCommentRequest commentRequest);
 
-    DocumentResponse restoreDocument(Long docId);
+    // Khôi phục tài liệu đã bị xóa
+    DocumentResponse restoreDocument(Long id);
 
-    List<DocumentVersionResponse> getDocumentVersions(Long docId);
+    // Lấy danh sách các phiên bản của tài liệu
+    List<DocumentVersionResponse> getDocumentVersions(Long id);
 
-    DocumentVersionResponse getSpecificDocumentVersion(Long docId, Integer versionNumber);
+    // Lấy phiên bản cụ thể của tài liệu
+    DocumentVersionResponse getSpecificDocumentVersion(Long id, Integer versionNumber);
 
-    void notifyRecipients(Long docId, String message); // Thêm message để gửi
+    // Gửi thông báo tới người nhận với nội dung message
+    void notifyRecipients(Long id, String message);
 
-    ResponseEntity<Resource> exportDocument(Long docId, String format); // Thêm định dạng file export
+    // Xuất tài liệu theo định dạng chỉ định
+    ResponseEntity<Resource> exportDocument(Long id, String format);
 
-    void forwardDocument(Long docId, String recipientEmail);
+    // Chuyển tiếp tài liệu tới email người nhận
+    void forwardDocument(Long id, String recipientEmail);
 
-    void distributeDocument(Long docId, List<Long> departmentIds); // Phân phối tới nhiều phòng ban
+    // Phân phối tài liệu tới nhiều phòng ban
+    void distributeDocument(Long id, List<Long> departmentIds);
 
-    ResponseEntity<Resource> generateDocumentReport(String reportType, Long departmentId); // Báo cáo theo phòng ban
+    // Tạo báo cáo tài liệu theo loại và phòng ban
+    ResponseEntity<Resource> generateDocumentReport(String reportType, Long departmentId);
 
-    // String createShareLink(Long docId, Instant expiryAt, boolean allowDownload);
+    // Tạo link chia sẻ tài liệu với thời gian hết hạn và quyền tải xuống
+    String createShareLink(Long id, Instant expiryAt, boolean allowDownload);
 }
