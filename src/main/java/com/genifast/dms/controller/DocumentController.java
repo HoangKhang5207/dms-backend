@@ -1,6 +1,5 @@
 package com.genifast.dms.controller;
 
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -302,8 +301,8 @@ public class DocumentController {
 
     @PostMapping("/{id}/notify")
     public ResponseEntity<String> notifyRecipients(@PathVariable("id") Long docId,
-            @RequestBody Map<String, String> payload) {
-        documentService.notifyRecipients(docId, payload.get("message"));
+            @RequestBody String message) {
+        documentService.notifyRecipients(docId, message);
         return ResponseEntity.ok("Đã gửi thông báo tới những người liên quan.");
     }
 
@@ -327,16 +326,18 @@ public class DocumentController {
     }
 
     @GetMapping("/report")
-    public ResponseEntity<Resource> generateReport(@RequestParam String reportType, @RequestParam Long departmentId) {
+    public ResponseEntity<Resource> generateReport(@RequestParam String reportType,
+            @RequestParam Long departmentId) {
         return documentService.generateDocumentReport(reportType, departmentId);
     }
 
     // Bổ sung cho Visitor - tạo liên kết chia sẻ công khai
-    @PostMapping("/{id}/share-public")
-    public ResponseEntity<String> createShareLink(@PathVariable("id") Long docId,
-            @RequestParam Instant expiryAt,
-            @RequestParam(defaultValue = "false") boolean allowDownload) {
-        String link = documentService.createShareLink(docId, expiryAt, allowDownload);
-        return ResponseEntity.ok(link);
-    }
+    // @PostMapping("/{id}/share-public")
+    // public ResponseEntity<String> createShareLink(@PathVariable("id") Long docId,
+    // @RequestParam Instant expiryAt,
+    // @RequestParam(defaultValue = "false") boolean allowDownload) {
+    // String link = documentService.createShareLink(docId, expiryAt,
+    // allowDownload);
+    // return ResponseEntity.ok(link);
+    // }
 }

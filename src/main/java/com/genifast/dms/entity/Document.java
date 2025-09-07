@@ -104,6 +104,9 @@ public class Document {
     @Column(name = "photo_id", columnDefinition = "TEXT")
     private String photoId;
 
+    @Column(name = "reject_reason", columnDefinition = "TEXT")
+    private String rejectReason;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "project_id") // Trường này có thể là NULL
     private Project project;

@@ -1,10 +1,8 @@
 package com.genifast.dms.service.impl;
 
 import java.io.IOException;
-import java.time.Instant;
-import java.util.Collections;
 import java.util.List;
-import java.util.UUID;
+import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
@@ -27,6 +25,7 @@ import com.genifast.dms.common.constant.ErrorCode;
 import com.genifast.dms.common.constant.ErrorMessage;
 import com.genifast.dms.common.constant.FileSizeFormatter;
 import com.genifast.dms.common.exception.ApiException;
+import com.genifast.dms.common.service.EmailService;
 import com.genifast.dms.common.utils.JwtUtils;
 import com.genifast.dms.dto.request.DocumentCommentRequest;
 import com.genifast.dms.dto.request.DocumentCreateRequest;
@@ -39,11 +38,15 @@ import com.genifast.dms.dto.response.DocumentVersionResponse;
 import com.genifast.dms.entity.Category;
 import com.genifast.dms.entity.Department;
 import com.genifast.dms.entity.Document;
+import com.genifast.dms.entity.DocumentVersion;
 import com.genifast.dms.entity.User;
+import com.genifast.dms.entity.enums.DocumentType;
 import com.genifast.dms.mapper.DocumentMapper;
+import com.genifast.dms.mapper.DocumentVersionMapper;
 import com.genifast.dms.repository.CategoryRepository;
 import com.genifast.dms.repository.DepartmentRepository;
 import com.genifast.dms.repository.DocumentRepository;
+import com.genifast.dms.repository.DocumentVersionRepository;
 import com.genifast.dms.repository.PrivateDocumentRepository;
 import com.genifast.dms.repository.UserRepository;
 import com.genifast.dms.repository.specifications.DocumentSpecification;
@@ -58,13 +61,16 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class DocumentServiceImpl implements DocumentService {
     private final DocumentRepository documentRepository;
+    private final DocumentVersionRepository documentVersionRepository;
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final CategoryRepository categoryRepository;
     private final PrivateDocumentRepository privateDocumentRepository;
     private final FileStorageService fileStorageService;
     private final DocumentMapper documentMapper;
+    private final DocumentVersionMapper documentVersionMapper;
     private final ObjectMapper objectMapper;
+    private final EmailService emailService;
 
     @Value("${shared.document.base-url}")
     private String baseUrlForSharedDocuments;
@@ -93,24 +99,39 @@ public class DocumentServiceImpl implements DocumentService {
 
         Document doc = Document.builder()
                 .title(createDto.getTitle())
-                .content(createDto.getContent())
-                .description(createDto.getDescription())
-                .type(StringUtils.getFilenameExtension(filePath))
+                // Các trường content, description giờ sẽ được quản lý bởi version
+                .type(StringUtils.getFilenameExtension(file.getOriginalFilename()))
+                .documentType(DocumentType.fromCode(createDto.getDocumentType()))
                 .category(category)
                 .department(category.getDepartment())
                 .organization(category.getOrganization())
-                .status(1) // Active
+                .status(1) // Trạng thái ban đầu: DRAFT
                 .accessType(createDto.getAccessType())
-                .filePath(filePath)
+                .filePath(filePath) // Vẫn lưu file path của phiên bản mới nhất để truy cập nhanh
                 .fileId(category.getDepartment().getName() + "/" + category.getName())
                 .storageCapacity(file.getSize())
                 .storageUnit(FileSizeFormatter.format(file.getSize()))
                 .originalFilename(file.getOriginalFilename())
                 .contentType(file.getContentType())
+                .latestVersion(1) // Phiên bản đầu tiên là 1
                 .build();
 
+        // Tạo phiên bản đầu tiên (version 1)
+        DocumentVersion initialVersion = DocumentVersion.builder()
+                .document(doc) // Liên kết ngược lại với document
+                .versionNumber(1)
+                .title(doc.getTitle())
+                .content(createDto.getDescription()) // Lưu description vào version
+                .status(doc.getStatus()) // Lưu status vào version
+                .changeDescription("Phiên bản ban đầu.")
+                .filePath(filePath) // File của phiên bản này
+                .build();
+
+        // Thêm phiên bản đầu tiên vào danh sách của Document
+        doc.getVersions().add(initialVersion);
+
         Document savedDoc = documentRepository.save(doc);
-        log.info("Document '{}' (ID: {}) uploaded by {}", savedDoc.getTitle(), savedDoc.getId(),
+        log.info("Document '{}' (ID: {}) and its initial version created by {}", savedDoc.getTitle(), savedDoc.getId(),
                 currentUser.getEmail());
         return documentMapper.toDocumentResponse(savedDoc);
     }
@@ -148,19 +169,42 @@ public class DocumentServiceImpl implements DocumentService {
     public DocumentResponse updateDocumentMetadata(Long docId, DocumentUpdateRequest updateDto) {
         User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
         Document document = findDocById(docId);
+
+        // Logic kiểm tra quyền chỉnh sửa vẫn giữ nguyên
         authorizeUserCanEditDocument(currentUser, document);
 
+        // **LOGIC VERSIONING MỚI**
+        // 1. Tăng số phiên bản
+        int newVersionNumber = document.getLatestVersion() + 1;
+        document.setLatestVersion(newVersionNumber);
+
+        // 2. Cập nhật thông tin trên Document chính (luôn là thông tin mới nhất)
         document.setTitle(updateDto.getTitle());
-        document.setDescription(updateDto.getDescription());
         if (updateDto.getCategoryId() != null && !updateDto.getCategoryId().equals(document.getCategory().getId())) {
             Category newCategory = categoryRepository.findById(updateDto.getCategoryId())
                     .orElseThrow(() -> new ApiException(ErrorCode.CATEGORY_NOT_FOUND,
                             ErrorMessage.CATEGORY_NOT_FOUND.getMessage()));
             document.setCategory(newCategory);
         }
+        // Giả sử sau khi update, tài liệu quay về trạng thái PENDING để được duyệt lại
+        document.setStatus(2); // PENDING
+
+        // 3. Tạo một bản ghi DocumentVersion mới
+        DocumentVersion newVersion = DocumentVersion.builder()
+                .document(document)
+                .versionNumber(newVersionNumber)
+                .title(updateDto.getTitle())
+                .content(updateDto.getDescription())
+                .status(document.getStatus()) // Trạng thái của phiên bản này là PENDING
+                .changeDescription(updateDto.getChangeDescription()) // Cần thêm trường này vào DTO
+                .filePath(document.getFilePath()) // Giả sử file không thay đổi, nếu có thì cần logic upload file mới
+                .build();
+
+        // 4. Thêm phiên bản mới vào tài liệu
+        document.getVersions().add(newVersion);
 
         Document updatedDoc = documentRepository.save(document);
-        log.info("Document ID {} metadata updated by {}", docId, currentUser.getEmail());
+        log.info("Document ID {} updated to version {} by {}", docId, newVersionNumber, currentUser.getEmail());
         return documentMapper.toDocumentResponse(updatedDoc);
     }
 
@@ -169,8 +213,15 @@ public class DocumentServiceImpl implements DocumentService {
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:delete')")
     @AuditLog(action = "DELETE_DOCUMENT")
     public void deleteDocument(Long docId) {
-        log.info("Nghiệp vụ xóa tài liệu ID: {}", docId);
-        // TODO: Implement logic xóa mềm hoặc xóa cứng tài liệu và file vật lý
+        Document document = findDocById(docId);
+
+        // Implement soft delete
+        document.setStatus(0); // 0 = INACTIVE/DELETED
+        documentRepository.save(document);
+
+        log.warn("Document ID {} has been soft-deleted by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+        // Lưu ý: File vật lý vẫn còn, có thể viết một scheduled job để xóa file sau một
+        // thời gian nhất định.
     }
 
     @Override
@@ -211,11 +262,26 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "APPROVE_DOCUMENT")
     public DocumentResponse approveDocument(Long docId) {
         Document document = findDocById(docId);
-        // Giả sử: 2 = PENDING, 3 = APPROVED
-        document.setStatus(3);
+
+        // ABAC Check: Chỉ phê duyệt khi tài liệu đang ở trạng thái PENDING (giả sử là
+        // 2)
+        if (document.getStatus() != 2) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Tài liệu không ở trạng thái chờ phê duyệt.");
+        }
+
+        document.setStatus(3); // 3 = APPROVED
         Document approvedDoc = documentRepository.save(document);
         log.info("Document ID {} has been approved by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
-        // TODO: Gửi email thông báo cho người trình duyệt
+
+        // --- BẮT ĐẦU PHẦN GỬI EMAIL ---
+        User creator = findUserByEmail(approvedDoc.getCreatedBy());
+        String subject = "Tài liệu của bạn đã được phê duyệt";
+        String message = String.format(
+                "Tài liệu <strong>'%s'</strong> (ID: %d) mà bạn đã trình duyệt đã được phê duyệt thành công.",
+                approvedDoc.getTitle(), approvedDoc.getId());
+        emailService.sendDocumentNotification(creator.getEmail(), creator.getFirstName(), subject, message);
+        // --- KẾT THÚC PHẦN GỬI EMAIL ---
+
         return documentMapper.toDocumentResponse(approvedDoc);
     }
 
@@ -225,12 +291,34 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "REJECT_DOCUMENT")
     public DocumentResponse rejectDocument(Long docId, String reason) {
         Document document = findDocById(docId);
-        // Giả sử: 4 = REJECTED
-        document.setStatus(4);
+
+        // ABAC Check: Chỉ từ chối khi tài liệu đang ở trạng thái PENDING (giả sử là 2)
+        if (document.getStatus() != 2) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Tài liệu không ở trạng thái chờ phê duyệt.");
+        }
+
+        if (!StringUtils.hasText(reason)) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Lý do từ chối là bắt buộc.");
+        }
+
+        document.setStatus(4); // 4 = REJECTED
+        // Bổ sung: Lưu lại lý do từ chối. Cần thêm một trường vào Document entity, ví
+        // dụ: rejectReason
+        document.setRejectReason(reason);
+
         Document rejectedDoc = documentRepository.save(document);
         log.warn("Document ID {} was rejected by {} with reason: {}", docId, JwtUtils.getCurrentUserLogin().orElse(""),
                 reason);
-        // TODO: Gửi email thông báo từ chối kèm lý do
+
+        // --- BẮT ĐẦU PHẦN GỬI EMAIL ---
+        User creator = findUserByEmail(rejectedDoc.getCreatedBy());
+        String subject = "Tài liệu của bạn đã bị từ chối";
+        String message = String.format(
+                "Tài liệu <strong>'%s'</strong> (ID: %d) của bạn đã bị từ chối.<br/><strong>Lý do:</strong> %s",
+                rejectedDoc.getTitle(), rejectedDoc.getId(), reason);
+        emailService.sendDocumentNotification(creator.getEmail(), creator.getFirstName(), subject, message);
+        // --- KẾT THÚC PHẦN GỬI EMAIL ---
+
         return documentMapper.toDocumentResponse(rejectedDoc);
     }
 
@@ -244,12 +332,15 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     @Override
-    @PreAuthorize("hasAuthority('documents:track')")
+    @PreAuthorize("hasPermission(#docId, 'document', 'documents:track')")
     @AuditLog(action = "TRACK_DOCUMENT")
     public void trackDocumentHistory(Long docId) {
-        log.info(" nghiệp vụ theo dõi lịch sử tài liệu ID: {}", docId);
-        // Logic thực tế sẽ nằm trong AuditLogService, phương thức này chỉ để kích hoạt
-        // log
+        // Phương thức này không cần làm gì cả.
+        // Annotation @PreAuthorize đã kiểm tra quyền.
+        // Annotation @AuditLog sẽ tự động ghi lại hành động "TRACK_DOCUMENT".
+        // Logic hiển thị log sẽ nằm ở AuditLogController.
+        log.info("User {} is tracking history for document ID: {}. Action logged.",
+                JwtUtils.getCurrentUserLogin().orElse(""), docId);
     }
 
     @Override
@@ -258,12 +349,36 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "SUBMIT_DOCUMENT")
     public DocumentResponse submitDocument(Long docId) {
         Document document = findDocById(docId);
-        // Giả sử: 1 = DRAFT, 2 = PENDING
-        document.setStatus(2);
+
+        // ABAC Check: Chỉ trình duyệt khi tài liệu đang ở trạng thái DRAFT (giả sử là
+        // 1)
+        if (document.getStatus() != 1) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ có thể trình duyệt tài liệu ở trạng thái bản nháp (Draft).");
+        }
+
+        document.setStatus(2); // 2 = PENDING
         Document submittedDoc = documentRepository.save(document);
         log.info("Document ID {} has been submitted for approval by {}", docId,
                 JwtUtils.getCurrentUserLogin().orElse(""));
-        // TODO: Gửi email thông báo cho người có quyền duyệt
+
+        // --- BẮT ĐẦU PHẦN GỬI EMAIL ---
+        // Tìm tất cả các manager của phòng ban để gửi thông báo
+        Department docDepartment = submittedDoc.getDepartment();
+        if (docDepartment != null) {
+            docDepartment.getUsers().stream()
+                    .filter(user -> user.getIsDeptManager() != null && user.getIsDeptManager())
+                    .forEach(manager -> {
+                        String subject = "Có tài liệu mới cần bạn phê duyệt";
+                        String message = String.format(
+                                "Tài liệu <strong>'%s'</strong> (ID: %d) vừa được trình duyệt bởi <strong>%s</strong> và đang chờ bạn xử lý.",
+                                submittedDoc.getTitle(), submittedDoc.getId(), submittedDoc.getCreatedBy());
+                        emailService.sendDocumentNotification(manager.getEmail(), manager.getFirstName(), subject,
+                                message);
+                    });
+        }
+        // --- KẾT THÚC PHẦN GỬI EMAIL ---
+
         return documentMapper.toDocumentResponse(submittedDoc);
     }
 
@@ -273,16 +388,26 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "PUBLISH_DOCUMENT")
     public DocumentResponse publishDocument(Long docId) {
         Document document = findDocById(docId);
+
+        // Logic ABAC đã được kiểm tra trong PermissionEvaluator,
+        // nhưng để an toàn, chúng ta có thể kiểm tra lại ở đây.
+        if (document.getDocumentType() != DocumentType.NOTICE || document.getStatus() != 3) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST,
+                    "Chỉ có thể công khai các tài liệu loại 'Thông báo' đã được phê duyệt.");
+        }
+
         document.setAccessType(1); // 1 = PUBLIC
-        document.setStatus(3); // Set status to APPROVED as well
         Document publishedDoc = documentRepository.save(document);
         log.info("Document ID {} has been published by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
+
+        // TODO: Có thể cần gửi thông báo đến toàn bộ tổ chức.
+
         return documentMapper.toDocumentResponse(publishedDoc);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasAuthority('documents:archive')")
+    @PreAuthorize("hasPermission(#docId, 'document', 'documents:archive')")
     @AuditLog(action = "ARCHIVE_DOCUMENT")
     public DocumentResponse archiveDocument(Long docId) {
         Document document = findDocById(docId);
@@ -298,12 +423,10 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "SIGN_DOCUMENT")
     public DocumentResponse signDocument(Long docId) {
         Document document = findDocById(docId);
-        // In a real scenario, this would integrate with a digital signature service.
-        // For now, we simulate by updating a field or status.
-        // Let's assume we add a "signed" flag or similar to the document entity if
-        // needed.
+        // Trong thực tế, logic này sẽ tích hợp với một dịch vụ chữ ký số.
+        // Ở đây, chúng ta chỉ ghi log hành động.
         log.info("Document ID {} has been signed by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
-        // No status change needed unless specified by business logic
+        // Có thể thêm một trường isSigned (boolean) vào entity Document nếu cần
         return documentMapper.toDocumentResponse(document);
     }
 
@@ -325,9 +448,8 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "UNLOCK_DOCUMENT")
     public DocumentResponse unlockDocument(Long docId) {
         Document document = findDocById(docId);
-        // Return to APPROVED status after unlocking
-        if (document.getStatus() == 6) { // Only unlock if it's locked
-            document.setStatus(3); // 3 = APPROVED
+        if (document.getStatus() == 6) { // Chỉ mở khóa khi đang bị khóa
+            document.setStatus(3); // Trở về trạng thái APPROVED
         }
         Document unlockedDoc = documentRepository.save(document);
         log.info("Document ID {} has been unlocked by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
@@ -339,18 +461,18 @@ public class DocumentServiceImpl implements DocumentService {
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:comment')")
     @AuditLog(action = "ADD_COMMENT")
     public void addComment(Long docId, DocumentCommentRequest commentRequest) {
-        log.info("Nghiệp vụ thêm bình luận vào tài liệu ID: {}", docId);
-        // TODO: Tạo và lưu entity Comment liên kết với Document và User
+        // TODO: Implement logic tạo và lưu entity Comment liên kết với Document và User
+        log.info("Thêm bình luận vào tài liệu ID: {}", docId);
     }
 
     @Override
     @Transactional
-    @PreAuthorize("hasAuthority('documents:restore')")
+    @PreAuthorize("hasPermission(#docId, 'document', 'documents:restore')")
     @AuditLog(action = "RESTORE_DOCUMENT")
     public DocumentResponse restoreDocument(Long docId) {
         Document document = findDocById(docId);
-        if (document.getStatus() == 5) { // Only restore if archived
-            document.setStatus(3); // Restore to APPROVED
+        if (document.getStatus() == 5) { // Chỉ khôi phục khi đang bị lưu trữ
+            document.setStatus(3); // Trở về trạng thái APPROVED
         }
         Document restoredDoc = documentRepository.save(document);
         log.info("Document ID {} has been restored by {}", docId, JwtUtils.getCurrentUserLogin().orElse(""));
@@ -361,18 +483,29 @@ public class DocumentServiceImpl implements DocumentService {
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:history')")
     @AuditLog(action = "VIEW_HISTORY")
     public List<DocumentVersionResponse> getDocumentVersions(Long docId) {
-        log.info("Nghiệp vụ xem lịch sử các phiên bản của tài liệu ID: {}", docId);
-        // TODO: Truy vấn bảng DocumentVersions và trả về danh sách
-        return Collections.emptyList();
+        // Kiểm tra tài liệu có tồn tại không
+        if (!documentRepository.existsById(docId)) {
+            throw new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, ErrorMessage.DOCUMENT_NOT_FOUND.getMessage());
+        }
+
+        // Lấy tất cả phiên bản và sắp xếp theo version giảm dần
+        List<DocumentVersion> versions = documentVersionRepository.findByDocumentIdOrderByVersionNumberDesc(docId);
+
+        log.info("Lấy lịch sử các phiên bản của tài liệu ID: {}", docId);
+        return documentVersionMapper.toResponseList(versions);
     }
 
     @Override
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:version:read')")
+    // Chúng ta sẽ truyền versionNumber vào trong chuỗi permission để
+    // CustomPermissionEvaluator xử lý
+    @PreAuthorize("hasPermission(#docId, 'document', 'documents:version:read:' + #versionNumber)")
     @AuditLog(action = "VIEW_SPECIFIC_VERSION")
     public DocumentVersionResponse getSpecificDocumentVersion(Long docId, Integer versionNumber) {
-        log.info("Nghiệp vụ xem phiên bản cụ thể số {} của tài liệu ID: {}", versionNumber, docId);
-        // TODO: Truy vấn phiên bản cụ thể và trả về
-        return null;
+        DocumentVersion version = documentVersionRepository.findByDocumentIdAndVersionNumber(docId, versionNumber)
+                .orElseThrow(() -> new ApiException(ErrorCode.DOCUMENT_NOT_FOUND, "Phiên bản tài liệu không tồn tại."));
+
+        log.info("Xem phiên bản cụ thể số {} của tài liệu ID: {}", versionNumber, docId);
+        return documentVersionMapper.toResponse(version);
     }
 
     @Override
@@ -380,14 +513,20 @@ public class DocumentServiceImpl implements DocumentService {
     @AuditLog(action = "NOTIFY_RECIPIENTS")
     public void notifyRecipients(Long docId, String message) {
         Document document = findDocById(docId);
+
+        if (document.getRecipients() == null || document.getRecipients().isEmpty()) {
+            log.info("Document ID {} has no recipients to notify.", docId);
+            return;
+        }
+
         log.info("Sending notification for document ID: {} with message: '{}'", docId, message);
-        // TODO: Giả lập logic lấy danh sách người nhận (recipients) từ document
-        // và gọi EmailService để gửi thông báo cho từng người.
-        // List<User> recipients = getRecipientsFor(document);
-        // for(User recipient : recipients) {
-        // emailService.sendNotification(recipient.getEmail(), "Thông báo về tài liệu: "
-        // + document.getTitle(), message);
-        // }
+
+        String subject = "Thông báo quan trọng về tài liệu: " + document.getTitle();
+
+        document.getRecipients().forEach(recipient -> {
+            emailService.sendDocumentNotification(recipient.getEmail(), recipient.getFirstName(), subject,
+                    message);
+        });
     }
 
     @Override
@@ -416,8 +555,32 @@ public class DocumentServiceImpl implements DocumentService {
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:forward')")
     @AuditLog(action = "FORWARD_DOCUMENT")
     public void forwardDocument(Long docId, String recipientEmail) {
-        log.info("Nghiệp vụ chuyển tiếp tài liệu ID: {} cho người dùng '{}'", docId, recipientEmail);
-        // TODO: Ghi nhận hành động và gửi thông báo/email cho người nhận
+        Document document = findDocById(docId);
+        User userToForward = findUserByEmail(recipientEmail);
+
+        // ABAC Check: Người nhận chuyển tiếp phải cùng tổ chức
+        if (userToForward.getOrganization() == null ||
+                !userToForward.getOrganization().getId().equals(document.getOrganization().getId())) {
+            throw new ApiException(ErrorCode.USER_NOT_IN_ORGANIZATION,
+                    "Chỉ có thể chuyển tiếp cho người dùng trong cùng tổ chức.");
+        }
+
+        // Thêm người dùng vào danh sách người nhận và lưu lại
+        document.getRecipients().add(userToForward);
+        documentRepository.save(document);
+
+        log.info("Document ID {} forwarded to user '{}' by {}", docId, recipientEmail,
+                JwtUtils.getCurrentUserLogin().orElse(""));
+
+        // --- BẮT ĐẦU PHẦN GỬI EMAIL ---
+        User forwarder = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+        User recipient = findUserByEmail(recipientEmail); // Cần lấy object User để có tên
+        String subject = "Bạn vừa được chuyển tiếp một tài liệu";
+        String message = String.format(
+                "Bạn vừa được <strong>%s</strong> chuyển tiếp tài liệu <strong>'%s'</strong> (ID: %d).",
+                forwarder.getFirstName(), document.getTitle(), document.getId());
+        emailService.sendDocumentNotification(recipientEmail, recipient.getFirstName(), subject, message);
+        // --- KẾT THÚC PHẦN GỬI EMAIL ---
     }
 
     @Override
@@ -425,9 +588,35 @@ public class DocumentServiceImpl implements DocumentService {
     @PreAuthorize("hasPermission(#docId, 'document', 'documents:distribute')")
     @AuditLog(action = "DISTRIBUTE_DOCUMENT")
     public void distributeDocument(Long docId, List<Long> departmentIds) {
-        log.info("Distributing document ID: {} to department IDs: {}", docId, departmentIds);
-        // TODO: Logic phân phối, có thể là tạo các bản ghi chia sẻ (PrivateDoc)
-        // cho tất cả thành viên của các phòng ban được chọn.
+        if (departmentIds == null || departmentIds.isEmpty()) {
+            throw new ApiException(ErrorCode.INVALID_REQUEST, "Cần chỉ định ít nhất một phòng ban để phân phối.");
+        }
+
+        Document document = findDocById(docId);
+        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+
+        // Lấy danh sách người dùng từ các phòng ban được chỉ định
+        List<User> usersToReceive = userRepository.findAllById(
+                departmentRepository.findAllById(departmentIds).stream()
+                        .flatMap(department -> department.getUsers().stream())
+                        .map(User::getId)
+                        .collect(Collectors.toList()));
+
+        // Thêm những người dùng này vào danh sách người nhận của tài liệu
+        document.getRecipients().addAll(usersToReceive);
+        documentRepository.save(document);
+
+        log.info("Document ID {} distributed to {} users in {} departments by {}",
+                docId, usersToReceive.size(), departmentIds.size(), currentUser.getEmail());
+
+        // --- BẮT ĐẦU PHẦN GỬI EMAIL ---
+        String subject = "Thông báo: Tài liệu mới được phân phối";
+        String message = String.format(
+                "Tài liệu quan trọng <strong>'%s'</strong> (ID: %d) vừa được phân phối đến phòng ban của bạn.",
+                document.getTitle(), document.getId());
+        usersToReceive.forEach(
+                user -> emailService.sendDocumentNotification(user.getEmail(), user.getFirstName(), subject, message));
+        // --- KẾT THÚC PHẦN GỬI EMAIL ---
     }
 
     @Override
@@ -467,29 +656,33 @@ public class DocumentServiceImpl implements DocumentService {
                 .body(resource);
     }
 
-    @Override
-    @Transactional
-    @PreAuthorize("hasPermission(#docId, 'document', 'documents:share:external')")
-    @AuditLog(action = "SHARE_DOCUMENT")
-    public String createShareLink(Long docId, Instant expiryAt, boolean allowDownload) {
-        User currentUser = findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
-        Document document = findDocById(docId);
+    // @Override
+    // @Transactional
+    // @PreAuthorize("hasPermission(#docId, 'document',
+    // 'documents:share:external')")
+    // @AuditLog(action = "SHARE_DOCUMENT")
+    // public String createShareLink(Long docId, Instant expiryAt, boolean
+    // allowDownload) {
+    // User currentUser =
+    // findUserByEmail(JwtUtils.getCurrentUserLogin().orElse(""));
+    // Document document = findDocById(docId);
 
-        // Người dùng phải có quyền truy cập vào tài liệu này mới được chia sẻ
-        authorizeUserCanAccessDocument(currentUser, document);
+    // // Người dùng phải có quyền truy cập vào tài liệu này mới được chia sẻ
+    // authorizeUserCanAccessDocument(currentUser, document);
 
-        // Tạo token ngẫu nhiên
-        String token = UUID.randomUUID().toString();
-        document.setShareToken(token);
-        document.setPublicShareExpiryAt(expiryAt);
-        document.setAllowPublicDownload(allowDownload);
+    // // Tạo token ngẫu nhiên
+    // String token = UUID.randomUUID().toString();
+    // document.setShareToken(token);
+    // document.setPublicShareExpiryAt(expiryAt);
+    // document.setAllowPublicDownload(allowDownload);
 
-        documentRepository.save(document);
-        log.info("User {} created a share link for document ID {}", currentUser.getEmail(), docId);
+    // documentRepository.save(document);
+    // log.info("User {} created a share link for document ID {}",
+    // currentUser.getEmail(), docId);
 
-        // Trả về URL đầy đủ để hiển thị cho người dùng
-        return baseUrlForSharedDocuments + token;
-    }
+    // // Trả về URL đầy đủ để hiển thị cho người dùng
+    // return baseUrlForSharedDocuments + token;
+    // }
 
     // ------ Helper Method ------
     private void authorizeUserCanAccessDocument(User user, Document document) {

@@ -11,6 +11,7 @@ public class DocumentUpdateRequest {
     private String title;
     private String content;
     private String description;
+    private String changeDescription;
 
     @JsonProperty("category_id")
     private Long categoryId;

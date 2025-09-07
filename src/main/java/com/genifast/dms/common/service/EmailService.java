@@ -73,4 +73,43 @@ public class EmailService {
             throw new IllegalStateException("Failed to send email: " + subject, ex);
         }
     }
+
+    /**
+     * Gửi một email đơn giản không dùng template.
+     * 
+     * @param to      Địa chỉ email người nhận.
+     * @param subject Tiêu đề email.
+     * @param text    Nội dung email.
+     */
+    @Async
+    public void sendSimpleNotification(String to, String subject, String text) {
+        try {
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, "UTF-8");
+            helper.setTo(to);
+            helper.setSubject(subject);
+            helper.setText(text);
+            mailSender.send(message);
+        } catch (Exception ex) {
+            // Trong thực tế, nên log lỗi này chi tiết hơn
+            throw new IllegalStateException("Failed to send simple email to " + to, ex);
+        }
+    }
+
+    /**
+     * Gửi email thông báo về tài liệu, sử dụng template.
+     * 
+     * @param to            Email người nhận
+     * @param recipientName Tên người nhận (để chào hỏi)
+     * @param subject       Tiêu đề của email
+     * @param message       Nội dung chính của thông báo (có thể chứa HTML)
+     */
+    @Async
+    public void sendDocumentNotification(String to, String recipientName, String subject, String message) {
+        sendTemplateEmail(to, "document_notification", context -> {
+            context.setVariable("recipientName", recipientName);
+            context.setVariable("subject", subject);
+            context.setVariable("message", message);
+        }, subject);
+    }
 }

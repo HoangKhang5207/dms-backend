@@ -201,13 +201,14 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                 // VÀ đã duyệt
                 boolean isManager = (user.getIsOrganizationManager() != null && user.getIsOrganizationManager())
                         || (user.getIsDeptManager() != null && user.getIsDeptManager());
-                return isManager && document.getDocumentType() == DocumentType.NOTICE && document.getStatus() == 3
-                        && document.getAccessType() == 1;
+                return isManager && document.getDocumentType() == DocumentType.NOTICE && document.getStatus() == 3;
 
             case "documents:track":
                 // ABAC: User là người nhận HOẶC thuộc phòng ban của tài liệu
                 boolean isRecipient = document.getRecipients().contains(user);
+                // Đảm bảo user và document đều có phòng ban trước khi so sánh
                 boolean isInDepartment = user.getDepartment() != null
+                        && document.getDepartment() != null
                         && user.getDepartment().getId().equals(document.getDepartment().getId());
                 return isRecipient || isInDepartment;
 
@@ -221,8 +222,9 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
             case "documents:export":
                 // ABAC: Trạng thái phải là APPROVED VÀ user là manager của phòng ban đó
                 boolean isDeptManagerForExport = user.getIsDeptManager() != null && user.getIsDeptManager()
+                        && user.getDepartment() != null
                         && user.getDepartment().getId().equals(document.getDepartment().getId());
-                return document.getStatus() == 3 && isDeptManagerForExport;
+                return document.getStatus() == 3 && isDeptManagerForExport; // 3 = APPROVED
 
             case "documents:report":
                 // Theo .docx: có thể lọc theo department và type
@@ -237,15 +239,13 @@ public class CustomPermissionEvaluator implements PermissionEvaluator {
                 return isOrgManager || isDeptManagerForReport;
 
             case "documents:notify":
-                // Theo .docx: gửi thông báo khi phân phối/công khai, phụ thuộc vào type và
-                // recipients
-                boolean isDeptManagerForNotify = user.getIsDeptManager() != null && user.getIsDeptManager()
-                        && user.getDepartment().getId().equals(document.getDepartment().getId());
-                // Việc notify chỉ có ý nghĩa khi tài liệu là loại cần thông báo rộng rãi và có
-                // người nhận
+                // ABAC: User phải là manager VÀ tài liệu là loại có thể thông báo rộng rãi
+                boolean isManagerForNotify = (user.getIsOrganizationManager() != null
+                        && user.getIsOrganizationManager())
+                        || (user.getIsDeptManager() != null && user.getIsDeptManager());
                 boolean isNotifiableType = (document.getDocumentType() == DocumentType.OUTGOING
                         || document.getDocumentType() == DocumentType.NOTICE);
-                return isDeptManagerForNotify && isNotifiableType && !document.getRecipients().isEmpty();
+                return isManagerForNotify && isNotifiableType;
 
             // Các quyền khác không có điều kiện ABAC phức tạp, nếu đã vượt qua
             // RBAC/Delegation thì được phép.

@@ -70,5 +70,5 @@ public interface DocumentService {
 
     ResponseEntity<Resource> generateDocumentReport(String reportType, Long departmentId); // Báo cáo theo phòng ban
 
-    String createShareLink(Long docId, Instant expiryAt, boolean allowDownload);
+    // String createShareLink(Long docId, Instant expiryAt, boolean allowDownload);
 }
