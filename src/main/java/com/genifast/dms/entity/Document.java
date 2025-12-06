@@ -36,7 +36,7 @@ public class Document {
     @JoinColumn(name = "category_id")
     private Category category;
 
-    @Column(name = "status")
+    @Column(name = "status", nullable = false)
     private Integer status;
 
     // BỔ SUNG: Thêm trường để lưu số hiệu của phiên bản mới nhất
@@ -48,10 +48,10 @@ public class Document {
     @Column(name = "document_type")
     private DocumentType documentType;
 
-    @Column(name = "created_by", length = 255)
+    @Column(name = "created_by", length = 255, nullable = false)
     private String createdBy;
 
-    @Column(length = 30)
+    @Column(length = 30, nullable = false)
     private String type;
 
     @Column(name = "total_page")
@@ -87,6 +87,7 @@ public class Document {
     @Column(name = "access_type")
     private Integer accessType;
 
+    @Column(nullable = false)
     private Integer confidentiality;
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -105,6 +106,9 @@ public class Document {
 
     @Column(name = "photo_id", columnDefinition = "TEXT")
     private String photoId;
+
+    @Column(name = "image_hash", length = 255)
+    private String imageHash;
 
     @Column(name = "reject_reason", columnDefinition = "TEXT")
     private String rejectReason;

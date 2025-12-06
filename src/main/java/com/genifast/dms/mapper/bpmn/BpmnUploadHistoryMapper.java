@@ -4,13 +4,13 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
 
-import com.genifast.dms.common.utils.AzureSasTokenMapperHelper;
+import com.genifast.dms.common.utils.LocalStorageMapperHelper;
 import com.genifast.dms.dto.bpmn.BpmnUploadHistoryDTO;
 import com.genifast.dms.dto.bpmn.VersionInfoDTO;
 import com.genifast.dms.entity.bpmn.BpmnUpload;
 import com.genifast.dms.entity.bpmn.BpmnUploadHistory;
 
-@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, uses = AzureSasTokenMapperHelper.class)
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, uses = LocalStorageMapperHelper.class)
 public interface BpmnUploadHistoryMapper {
   @Mapping(source = "path", target = "path", qualifiedByName = "generateSASToken")
   @Mapping(source = "pathSvg", target = "pathSvg", qualifiedByName = "generateSASToken")

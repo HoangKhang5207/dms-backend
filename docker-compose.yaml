@@ -1,0 +1,41 @@
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    restart: always
+    networks:
+      - es-net
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+
+  be_java:
+    container_name: be-java-container
+    build: .
+    ports:
+      - "8080:8080"
+    networks:
+      - es-net
+    depends_on:
+      - redis
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "10"
+    restart: always
+
+networks:
+  es-net:
+    driver: bridge
+
+volumes:
+  redis_data:

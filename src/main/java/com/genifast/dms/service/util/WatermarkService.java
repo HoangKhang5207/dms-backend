@@ -42,7 +42,7 @@ public class WatermarkService {
 
         BaseFont bf = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.EMBEDDED);
         PdfGState gstate = new PdfGState();
-        gstate.setFillOpacity(0.0f); // Set opacity to 0 to make it invisible
+        gstate.setFillOpacity(0.3f); // Hiển thị mờ (30%) thay vì ẩn hoàn toàn
 
         Random random = new Random();
 
@@ -54,9 +54,10 @@ public class WatermarkService {
             PdfContentByte over = stamper.getOverContent(i);
             over.saveState();
             over.setGState(gstate);
+            over.setColorFill(Color.GRAY); // Màu xám
             over.beginText();
-            over.setFontAndSize(bf, 8); // Use a small font size
-            over.showTextAligned(Element.ALIGN_LEFT, watermarkText, x, y, 0);
+            over.setFontAndSize(bf, 20); // Tăng cỡ chữ lên 20 cho dễ nhìn
+            over.showTextAligned(Element.ALIGN_LEFT, watermarkText, x, y, 45); // Xoay 45 độ cho giống watermark
             over.endText();
             over.restoreState();
         }
@@ -115,18 +116,21 @@ public class WatermarkService {
 
             // Create a new paragraph at the end of the document
             XWPFParagraph paragraph = document.createParagraph();
+            paragraph.setAlignment(ParagraphAlignment.CENTER); // Căn giữa
             XWPFRun run = paragraph.createRun();
             run.setText(fileId);
+            run.setColor("808080"); // Màu xám
+            run.setFontSize(20); // Chữ to
+            // run.getCTR().addNewRPr().addNewVanish(); // Bỏ ẩn
 
-            // Make the text hidden using the "vanish" property
-            run.getCTR().addNewRPr().addNewVanish();
-
-            // Add another hidden watermark at the beginning for robustness
+            // Add another visible watermark at the beginning
             XWPFParagraph firstParagraph = document.getParagraphs().get(0);
             if (firstParagraph != null) {
                 XWPFRun firstRun = firstParagraph.insertNewRun(0);
-                firstRun.setText(fileId);
-                firstRun.getCTR().addNewRPr().addNewVanish();
+                firstRun.setText(fileId + " - "); // Thêm dấu gạch nối để phân cách với nội dung chính
+                firstRun.setColor("808080");
+                firstRun.setFontSize(20);
+                // firstRun.getCTR().addNewRPr().addNewVanish(); // Bỏ ẩn
             }
 
             document.write(outputStream);

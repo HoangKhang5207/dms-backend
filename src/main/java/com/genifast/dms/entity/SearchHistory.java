@@ -22,7 +22,7 @@ public class SearchHistory {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "user_id")
+    @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
     @Column(name = "created_at")
@@ -30,6 +30,9 @@ public class SearchHistory {
 
     @Column(name = "updated_at")
     private Instant updatedAt;
+
+    @Column(length = 255)
+    private String title;
 
     @Column(length = 255)
     private String keywords;

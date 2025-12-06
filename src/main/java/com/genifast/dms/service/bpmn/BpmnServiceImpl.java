@@ -22,7 +22,7 @@ import com.genifast.dms.repository.OrganizationRepository;
 import com.genifast.dms.repository.bpmn.BpmnUploadHistoryRepository;
 import com.genifast.dms.repository.bpmn.BpmnUploadRepository;
 import com.genifast.dms.service.BaseServiceImpl;
-import com.genifast.dms.service.azureStorage.AzureStorageService;
+import com.genifast.dms.service.localStorage.LocalStorageService;
 
 @Service
 @AllArgsConstructor
@@ -31,7 +31,7 @@ public class BpmnServiceImpl extends BaseServiceImpl<BpmnUpload, Long, BpmnUploa
     implements BpmnService {
   private final BpmnUploadHistoryRepository bpmnUploadHistoryRepository;
 
-  private final AzureStorageService azureStorageService;
+  private final LocalStorageService localStorageService;
 
   private final BpmnUploadMapper bpmnUploadMapper;
   private final BpmnUploadHistoryMapper bpmnUploadHistoryMapper;
@@ -147,8 +147,8 @@ public class BpmnServiceImpl extends BaseServiceImpl<BpmnUpload, Long, BpmnUploa
     }
 
     try {
-      String bpmnUrl = azureStorageService.uploadFile(saveBRequest.getFile(), false);
-      String svgUrl = azureStorageService.uploadFile(saveBRequest.getSvgFile(), true);
+      String bpmnUrl = localStorageService.uploadFile(saveBRequest.getFile(), false);
+      String svgUrl = localStorageService.uploadFile(saveBRequest.getSvgFile(), true);
 
       bpmnUpload.setName(saveBRequest.getName());
       bpmnUpload.setPath(bpmnUrl);

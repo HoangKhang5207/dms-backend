@@ -33,4 +33,20 @@ public class UserResponse {
 
     @JsonProperty("created_at")
     private LocalDateTime createdAt;
+
+    // Added for UC39: Display user info
+    @JsonProperty("full_name")
+    private String fullName;
+
+    @JsonProperty("department_name")
+    private String departmentName;
+
+    @JsonProperty("position_name")
+    private String positionName;
+
+    @JsonProperty("roles")
+    private java.util.Set<String> roleNames;
+
+    @JsonProperty("permissions")
+    private java.util.Set<String> permissionNames;
 }

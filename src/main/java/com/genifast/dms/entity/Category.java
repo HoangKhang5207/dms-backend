@@ -39,7 +39,7 @@ public class Category {
     @JoinColumn(name = "organization_id")
     private Organization organization;
 
-    @Column(name = "created_by", length = 30)
+    @Column(name = "created_by", length = 255, nullable = false)
     private String createdBy;
 
     @Column(name = "created_at")
@@ -52,7 +52,7 @@ public class Category {
     private Integer status;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "department_id", nullable = false)
+    @JoinColumn(name = "department_id")
     private Department department;
 
     @OneToMany(mappedBy = "parentCategory", fetch = FetchType.LAZY)

@@ -27,5 +27,11 @@ public class UserNotification {
     @JoinColumn(name = "noti_id", nullable = false)
     private Notification notification;
 
+    @Column(length = 255)
+    private String title;
+
+    @Column(length = 500)
+    private String content;
+
     private Integer status;
 }

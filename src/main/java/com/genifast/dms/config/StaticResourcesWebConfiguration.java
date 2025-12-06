@@ -8,12 +8,16 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 @Configuration
 public class StaticResourcesWebConfiguration implements WebMvcConfigurer {
 
-    @Value("${preview.location}")
+    @Value("${preview.location:file:./uploads/}")
     private String baseURI;
+
+    @Value("${storage.local.base-url:/storage}")
+    private String baseUrl;
 
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        registry.addResourceHandler("/storage/**")
-                .addResourceLocations(baseURI);
+        // Map storage URL to local file system
+        registry.addResourceHandler(baseUrl + "/**")
+               .addResourceLocations(baseURI);
     }
 }

@@ -42,6 +42,7 @@ public class DatabaseInitializer implements CommandLineRunner {
         private final DeviceRepository deviceRepository;
         private final UserPermissionRepository userPermissionRepository;
         private final PrivateDocRepository privateDocRepository;
+        private final PositionRepository positionRepository;
 
         @Override
         @Transactional
@@ -80,14 +81,20 @@ public class DatabaseInitializer implements CommandLineRunner {
                         departments = createTestDepartments(testOrg);
                 }
 
+                // Create positions
+                Map<String, Position> positions = new HashMap<>();
+                if (testOrg != null) {
+                        positions = createTestPositions();
+                }
+
                 // Create admin and test users
                 if (countUsers == 0) {
-                        createAdminUser();
+                        createAdminUser(testOrg); // ✅ Truyền testOrg vào
                         if (testOrg != null && !departments.isEmpty()) {
                                 // Create org roles and assign permissions per scenario
                                 createOrganizationRolesWithPermissions(testOrg);
                                 // Create users per scenario
-                                createTestUsers(testOrg, departments);
+                                createTestUsers(testOrg, departments, positions);
                         }
                 }
 
@@ -99,7 +106,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                 log.info(">>> DATABASE INITIALIZATION COMPLETED <<<");
         }
 
-        private void createAdminUser() {
+        private void createAdminUser(Organization organization) {
                 if (userRepository.findByEmail("quantri@genifast.edu.vn").isEmpty()) {
                         User adminUser = new User();
                         adminUser.setEmail("quantri@genifast.edu.vn");
@@ -109,6 +116,11 @@ public class DatabaseInitializer implements CommandLineRunner {
                         adminUser.setGender(false);
                         adminUser.setStatus(1); // Active
                         adminUser.setIsAdmin(true); // Giữ lại flag này để tương thích
+
+                        // ✅ Set organization nếu có
+                        if (organization != null) {
+                                adminUser.setOrganization(organization);
+                        }
 
                         // Gán role Quản trị viên
                         // Chọn solution này:
@@ -261,6 +273,23 @@ public class DatabaseInitializer implements CommandLineRunner {
                 return departments;
         }
 
+        private Map<String, Position> createTestPositions() {
+                Map<String, Position> positions = new HashMap<>();
+                List<String> positionNames = Arrays.asList(
+                                "Hiệu trưởng", "Trưởng khoa", "Phó khoa", "Chuyên viên",
+                                "Giáo vụ", "Phó phòng", "Cán bộ", "Văn thư",
+                                "Pháp chế", "Nhân viên Lưu trữ", "Người nhận");
+
+                for (String name : positionNames) {
+                        Position position = positionRepository.findByName(name)
+                                        .orElseGet(() -> positionRepository
+                                                        .save(Position.builder().name(name).build()));
+                        positions.put(name, position);
+                }
+                log.info(">>> Ensured {} positions exist <<<", positions.size());
+                return positions;
+        }
+
         private Permission getPermission(String name) {
                 return permissionRepository.findByName(name)
                                 .orElseThrow(() -> new RuntimeException("Permission not found: " + name));
@@ -318,7 +347,8 @@ public class DatabaseInitializer implements CommandLineRunner {
                 return Arrays.stream(lists).flatMap(List::stream).distinct().collect(Collectors.toList());
         }
 
-        private void createTestUsers(Organization organization, Map<String, Department> departments) {
+        private void createTestUsers(Organization organization, Map<String, Department> departments,
+                        Map<String, Position> positions) {
                 // Helper to attach role by name
                 java.util.function.BiConsumer<User, String> attachRole = (u, roleName) -> {
                         Role r = roleRepository.findByNameAndOrganization_Id(roleName, organization.getId())
@@ -342,6 +372,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(true)
                                 .organization(organization)
                                 .department(departments.get("BGH"))
+                                .position(positions.get("Hiệu trưởng"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -362,6 +393,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("K.CNTT"))
+                                .position(positions.get("Trưởng khoa"))
                                 .isDeptManager(true)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -382,6 +414,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("K.CNTT"))
+                                .position(positions.get("Phó khoa"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -402,6 +435,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("P.DTAO"))
+                                .position(positions.get("Chuyên viên"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -453,6 +487,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("K.CNTT"))
+                                .position(positions.get("Giáo vụ"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -473,6 +508,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("P.DTAO"))
+                                .position(positions.get("Phó phòng"))
                                 .isDeptManager(true)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -493,6 +529,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("P.TCHC"))
+                                .position(positions.get("Cán bộ"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -513,6 +550,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("P.TCHC"))
+                                .position(positions.get("Văn thư"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -533,6 +571,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("BGH.PC"))
+                                .position(positions.get("Pháp chế"))
                                 .isDeptManager(true)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -553,6 +592,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("P.LT"))
+                                .position(positions.get("Nhân viên Lưu trữ"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -573,6 +613,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .isOrganizationManager(false)
                                 .organization(organization)
                                 .department(departments.get("K.CNTT"))
+                                .position(positions.get("Người nhận"))
                                 .isDeptManager(false)
                                 .createdAt(java.time.LocalDateTime.now())
                                 .updatedAt(java.time.LocalDateTime.now())
@@ -580,26 +621,8 @@ public class DatabaseInitializer implements CommandLineRunner {
                 attachRole.accept(userNn, "Người nhận");
                 userRepository.save(userNn);
 
-                // user-qtv: Quản trị viên (BGH) - giữ lại vai trò hệ thống và is_admin=true
-                if (userRepository.findByEmail("quantri@genifast.edu.vn").isEmpty()) {
-                        User userQtv = User.builder()
-                                        .firstName("Lê Thị")
-                                        .lastName("H")
-                                        .fullName("Lê Thị H")
-                                        .email("quantri@genifast.edu.vn")
-                                        .password(passwordEncoder.encode("123456"))
-                                        .gender(false)
-                                        .status(1)
-                                        .isAdmin(true)
-                                        .isOrganizationManager(false)
-                                        .organization(organization)
-                                        .department(departments.get("BGH"))
-                                        .isDeptManager(false)
-                                        .createdAt(java.time.LocalDateTime.now())
-                                        .updatedAt(java.time.LocalDateTime.now())
-                                        .build();
-                        userRepository.save(userQtv);
-                }
+                // ❌ XÓA: user-qtv đã được tạo ở createAdminUser() với organization_id = 1
+                // Không cần tạo lại ở đây
 
                 // user-ext: External user (no org)
                 User userExt = User.builder()
@@ -713,6 +736,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .organization(organization)
                                 .department(departments.get("P.DTAO"))
                                 .status(1)
+                                .createdBy("system")
                                 .createdAt(Instant.now())
                                 .build();
                 categoryRepository.save(catQuyChe);
@@ -723,6 +747,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .organization(organization)
                                 .department(departments.get("P.DTAO"))
                                 .status(1)
+                                .createdBy("system")
                                 .createdAt(Instant.now())
                                 .build();
                 categoryRepository.save(catKeHoachDaoTao);
@@ -733,6 +758,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .organization(organization)
                                 .department(departments.get("BGH"))
                                 .status(1)
+                                .createdBy("system")
                                 .createdAt(Instant.now())
                                 .build();
                 categoryRepository.save(catHopTacQT);
@@ -743,6 +769,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .organization(organization)
                                 .department(departments.get("P.TCHC"))
                                 .status(1)
+                                .createdBy("system")
                                 .createdAt(Instant.now())
                                 .build();
                 categoryRepository.save(catBaoCaoTC);
@@ -753,6 +780,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .organization(organization)
                                 .department(departments.get("BGH"))
                                 .status(1)
+                                .createdBy("system")
                                 .createdAt(Instant.now())
                                 .build();
                 categoryRepository.save(catHopDong);
@@ -763,6 +791,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .organization(organization)
                                 .department(departments.get("P.DTAO"))
                                 .status(1)
+                                .createdBy("system")
                                 .createdAt(Instant.now())
                                 .build();
                 categoryRepository.save(catDanhSach);

@@ -25,6 +25,9 @@ public class Comment {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    @Column(length = 255)
+    private String title;
+
     @Column(columnDefinition = "TEXT")
     private String content;
 
@@ -32,7 +35,7 @@ public class Comment {
     @JoinColumn(name = "parent_comment_id")
     private Comment parentComment;
 
-    @Column(name = "status")
+    @Column(name = "status", nullable = false)
     private Integer status;
 
     @ManyToOne(fetch = FetchType.LAZY)

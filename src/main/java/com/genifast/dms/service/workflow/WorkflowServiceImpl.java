@@ -51,7 +51,7 @@ import com.genifast.dms.repository.workflow.WorkflowOrgRepository;
 import com.genifast.dms.repository.workflow.WorkflowRepository;
 import com.genifast.dms.repository.workflow.WorkflowStepsRepository;
 import com.genifast.dms.service.BaseServiceImpl;
-import com.genifast.dms.service.azureStorage.AzureStorageService;
+import com.genifast.dms.service.localStorage.LocalStorageService;
 import com.genifast.dms.service.bpmn.BpmnService;
 import com.genifast.dms.service.task.WTaskService;
 
@@ -66,7 +66,7 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
   private final RepositoryService repositoryService;
 
   private final WTaskService taskService;
-  private final AzureStorageService azureStorageService;
+  private final LocalStorageService localStorageService;
 
   private final BpmnUploadMapper bpmnUploadMapper;
   private final BpmnUploadHistoryMapper bpmnUploadHistoryMapper;
@@ -96,7 +96,7 @@ public class WorkflowServiceImpl extends BaseServiceImpl<Workflow, Long, Workflo
       throw new IllegalArgumentException(
           "BPMN upload not found with id: " + workflowDto.getBpmnUploadId());
     }
-    String bpmnPathWithSas = azureStorageService.getBlobUrlWithSasToken(bpmnUpload.getPath());
+    String bpmnPathWithSas = localStorageService.getBlobUrlWithSasToken(bpmnUpload.getPath());
 
     try (InputStream inputStream = new URL(bpmnPathWithSas).openStream()) {
       byte[] bpmnBytes = inputStream.readAllBytes();

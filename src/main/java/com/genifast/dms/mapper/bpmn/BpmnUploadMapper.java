@@ -5,11 +5,11 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.MappingConstants;
 
-import com.genifast.dms.common.utils.AzureSasTokenMapperHelper;
+import com.genifast.dms.common.utils.LocalStorageMapperHelper;
 import com.genifast.dms.dto.bpmn.BpmnUploadDTO;
 import com.genifast.dms.entity.bpmn.BpmnUpload;
 
-@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, uses = AzureSasTokenMapperHelper.class)
+@Mapper(componentModel = MappingConstants.ComponentModel.SPRING, uses = LocalStorageMapperHelper.class)
 public interface BpmnUploadMapper {
 
   @Mapping(source = "path", target = "path", qualifiedByName = "generateSASToken")

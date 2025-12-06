@@ -33,7 +33,7 @@ public class Organization {
 
     private String description;
 
-    @Column(name = "status")
+    @Column(name = "status", nullable = false)
     private Integer status;
 
     @Column(name = "created_at")
