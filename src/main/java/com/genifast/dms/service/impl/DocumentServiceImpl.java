@@ -530,7 +530,7 @@ public class DocumentServiceImpl implements DocumentService {
                     .userId(recipientId)
                     .docId(id)
                     .permission(perm)
-                    .versionNumber(document.getVersionNumber())
+                    .version(document.getVersion())
                     .expiryDate((fromDate != null && toDate != null) ? toDate : null)
                     .build();
             documentPermissionRepository.save(dp);

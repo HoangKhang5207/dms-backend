@@ -26,8 +26,8 @@ public class DocumentPermission {
     @Column(name = "permission")
     private String permission;
 
-    @Column(name = "version_number")
-    private Integer versionNumber;
+    @Column(name = "version", length = 20)
+    private String version;
 
     @Column(name = "expiry_date")
     private Instant expiryDate;

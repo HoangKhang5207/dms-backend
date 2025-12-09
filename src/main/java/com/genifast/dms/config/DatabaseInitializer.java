@@ -816,7 +816,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catQuyChe)
                                 .confidentiality(DocumentConfidentiality.INTERNAL.getValue())
                                 .status(DocumentStatus.PENDING.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .recipients(Set.of(
                                                 userRepository.findByEmail("hieutruong@genifast.edu.vn").get(),
                                                 userRepository.findByEmail("chuyenvien.dtao@genifast.edu.vn").get()))
@@ -838,7 +838,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .confidentiality(DocumentConfidentiality.PRIVATE.getValue())
                                 .accessType(4) // PRIVATE access type
                                 .status(DocumentStatus.APPROVED.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .recipients(Set.of(
                                                 userRepository.findByEmail("truongkhoa.cntt@genifast.edu.vn").get(),
                                                 userRepository.findByEmail("giaovu.cntt@genifast.edu.vn").get()))
@@ -859,7 +859,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catHopTacQT)
                                 .confidentiality(DocumentConfidentiality.INTERNAL.getValue())
                                 .status(DocumentStatus.APPROVED.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .recipients(Set.of(
                                                 userRepository.findByEmail("truongkhoa.cntt@genifast.edu.vn").get(),
                                                 userRepository.findByEmail("phokhoa.cntt@genifast.edu.vn").get()))
@@ -880,7 +880,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catBaoCaoTC)
                                 .confidentiality(DocumentConfidentiality.LOCKED.getValue())
                                 .status(DocumentStatus.APPROVED.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .recipients(Set.of(
                                                 userRepository.findByEmail("hieutruong@genifast.edu.vn").get(),
                                                 userRepository.findByEmail("luutru@genifast.edu.vn").get()))
@@ -900,7 +900,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catHopDong)
                                 .confidentiality(DocumentConfidentiality.EXTERNAL.getValue())
                                 .status(DocumentStatus.APPROVED.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .createdBy("hieutruong@genifast.edu.vn")
                                 .createdAt(Instant.now())
                                 .build();
@@ -917,7 +917,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catKeHoachDaoTao)
                                 .confidentiality(DocumentConfidentiality.PUBLIC.getValue())
                                 .status(DocumentStatus.APPROVED.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .createdBy("phophong.dtao@genifast.edu.vn")
                                 .createdAt(Instant.now())
                                 .build();
@@ -935,7 +935,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .confidentiality(DocumentConfidentiality.PRIVATE.getValue())
                                 .accessType(4) // PRIVATE access type
                                 .status(DocumentStatus.APPROVED.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .recipients(Set.of(
                                                 userRepository.findByEmail("phophong.dtao@genifast.edu.vn").get()))
                                 .createdBy("chuyenvien.dtao@genifast.edu.vn")
@@ -997,7 +997,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catKeHoachDaoTao)
                                 .confidentiality(DocumentConfidentiality.INTERNAL.getValue())
                                 .status(DocumentStatus.DRAFT.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .createdBy("chuyenvien.dtao@genifast.edu.vn")
                                 .createdAt(Instant.now())
                                 .build();
@@ -1014,7 +1014,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .category(catDanhSach)
                                 .confidentiality(DocumentConfidentiality.PUBLIC.getValue())
                                 .status(DocumentStatus.PENDING.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .createdBy("phophong.dtao@genifast.edu.vn")
                                 .createdAt(Instant.now())
                                 .build();
@@ -1031,7 +1031,7 @@ public class DatabaseInitializer implements CommandLineRunner {
                                 .project(project)
                                 .confidentiality(DocumentConfidentiality.PROJECT.getValue())
                                 .status(DocumentStatus.PENDING.getValue())
-                                .versionNumber(1)
+                                .version("1.0")
                                 .recipients(Set.of(
                                                 userRepository.findByEmail("truongkhoa.cntt@genifast.edu.vn").get(),
                                                 userRepository.findByEmail("chuyenvien.dtao@genifast.edu.vn").get()))

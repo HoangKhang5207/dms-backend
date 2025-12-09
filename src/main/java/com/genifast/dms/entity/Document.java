@@ -60,7 +60,7 @@ public class Document {
     @Column(length = 255)
     private String description;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
+    @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
     @Column(name = "updated_at", nullable = false)
@@ -138,9 +138,16 @@ public class Document {
     // @Column(name = "recipients", columnDefinition = "TEXT")
     // private String recipients; // JSON array chứa danh sách user IDs
 
-    @Column(name = "version_number")
+    @Column(name = "version", length = 20, nullable = false)
     @Builder.Default
-    private Integer versionNumber = 1;
+    private String version = "1.0";
+
+    @Column(name = "tags_json", columnDefinition = "TEXT")
+    private String tagsJson;
+
+    @Column(name = "is_paid", nullable = false)
+    @Builder.Default
+    private boolean isPaid = false;
 
     @Column(name = "signed_at")
     private Instant signedAt;
